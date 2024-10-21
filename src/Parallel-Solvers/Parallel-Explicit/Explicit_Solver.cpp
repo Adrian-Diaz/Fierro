@@ -63,6 +63,7 @@
 #include "Simulation_Parameters/Simulation_Parameters_Explicit.h"
 #include "Simulation_Parameters/FEA_Module/FEA_Module_Headers.h"
 #include "FEA_Module_SGH.h"
+#include "FEA_Module_DANN.h"
 //#include "FEA_Module_Eulerian.h"
 #include "FEA_Module_Dynamic_Elasticity.h"
 #include "FEA_Module_Inertial.h"
@@ -156,7 +157,7 @@ void Explicit_Solver::run() {
   MPI_Comm_size(world,&nranks);
   
   if(myrank == 0){
-    std::cout << "Starting Lagrangian SGH code" << std::endl;
+    std::cout << "Starting Lagrangian Explicit code" << std::endl;
   }
 
   //initialize Trilinos communicator class
@@ -307,11 +308,6 @@ void Explicit_Solver::run() {
     //std::cout << "Linear Explicit_Solver Error" << std::endl <<std::flush;
     //return;
   //}
-  
-  //hack allocation of module
-  //sgh_module = new FEA_Module_SGH(this, *mesh);
-
-  //sgh_module->setup();
 
   for(int imodule = 0; imodule < nfea_modules; imodule++){
       if(myrank == 0)
@@ -332,7 +328,6 @@ void Explicit_Solver::run() {
     // ---------------------------------------------------------------------
     //  Calculate the SGH solution
     // ---------------------------------------------------------------------  
-      //sgh_module->sgh_solve();
       for(int imodule = 0; imodule < nfea_modules; imodule++){
         if(myrank == 0) //TODO; implement solve bool so modules like the inertial module dont print this
           std::cout << "Starting solve for FEA module " << imodule <<std::endl <<std::flush;
@@ -342,7 +337,6 @@ void Explicit_Solver::run() {
   }
 
   // clean up all material models
-  //sgh_module->cleanup_material_models();
   for(int imodule = 0; imodule < nfea_modules; imodule++){
     //allocate and fill sparse structures needed for global solution in each FEA module
     fea_modules[imodule]->module_cleanup();
@@ -1096,6 +1090,9 @@ void Explicit_Solver::FEA_module_setup(){
       },
       [&](Dynamic_Elasticity_Parameters& param) {
         fea_modules.push_back(new FEA_Module_Dynamic_Elasticity(param, this, mesh));
+      },
+      [&](DANN_Parameters& param) {
+        fea_modules.push_back(new FEA_Module_DANN(param, this, mesh));
       },
       [&](Inertial_Parameters& param) {
         fea_modules.push_back(new FEA_Module_Inertial(param, this));

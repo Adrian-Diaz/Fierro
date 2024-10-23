@@ -7,7 +7,6 @@ set(CMAKE_Fortran_FLAGS  "${Trilinos_Fortran_COMPILER_FLAGS} ${CMAKE_Fortran_FLA
 include_directories(include)
 
 set(SRC_Files 
-src/time_integration.cpp 
 src/momentum.cpp 
 src/properties.cpp
 src/setup_sgh.cpp)

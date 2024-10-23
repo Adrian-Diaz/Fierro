@@ -80,13 +80,9 @@ public:
 
     void setup();
 
-    void cleanup_material_models();
-
     int solve();
 
-    void checkpoint_solve(std::set<Dynamic_Checkpoint>::iterator start_checkpoint, size_t bounding_timestep);
-
-    void module_cleanup();
+    //void checkpoint_solve(std::set<Dynamic_Checkpoint>::iterator start_checkpoint, size_t bounding_timestep);
 
     void dann_solve();
 
@@ -96,29 +92,17 @@ public:
 
     void init_assembly();
 
-    void rk_init(DViewCArrayKokkos<double>& node_states,
-                 const size_t num_elems,
-                 const size_t num_nodes);
-
-    void get_timestep(mesh_t& mesh,
-                      DViewCArrayKokkos<double>& node_coords,
-                      DViewCArrayKokkos<double>& node_vel,
-                      DViewCArrayKokkos<double>& elem_sspd,
-                      DViewCArrayKokkos<double>& elem_vol);
-
     void update_state(const DCArrayKokkos<material_t>& material,
                       const mesh_t& mesh,
                       const DViewCArrayKokkos<double>& node_states,
                       const double rk_alpha,
                       const size_t cycle);
 
-    virtual void update_forward_solve(Teuchos::RCP<const MV> zp, bool print_design=false);
+    //virtual void update_forward_solve(Teuchos::RCP<const MV> zp, bool print_design=false);
 
-    void comm_adjoint_vector(int cycle);
+    //void comm_adjoint_vector(int cycle);
 
     void comm_variables(Teuchos::RCP<const MV> zp);
-
-    void init_output();
 
     void compute_output();
 
@@ -139,20 +123,17 @@ public:
     void write_outputs(const mesh_t& mesh,
                        DViewCArrayKokkos<double>& node_states);
 
-    void ensight(const mesh_t& mesh,
-                 const DViewCArrayKokkos<double>& node_states);
-
     void state_file(const mesh_t& mesh,
                     const DViewCArrayKokkos<double>& node_states);
 
-    void weight_constraints(host_vec_array weights_lower_bound);
+    // void weight_constraints(host_vec_array weights_lower_bound);
 
-    void compute_optimization_adjoint_full(Teuchos::RCP<const MV> design_weights_distributed); // Force depends on node coords, velocity, and sie
+    // void compute_optimization_adjoint_full(Teuchos::RCP<const MV> design_weights_distributed); // Force depends on node coords, velocity, and sie
 
-    void compute_optimization_gradient_full(Teuchos::RCP<const MV> design_weights_distributed, Teuchos::RCP<MV> design_gradients_distributed);
+    // void compute_optimization_gradient_full(Teuchos::RCP<const MV> design_weights_distributed, Teuchos::RCP<MV> design_gradients_distributed);
 
-    void compute_optimization_gradient_tally(Teuchos::RCP<const MV> design_weights_distributed, Teuchos::RCP<MV> design_gradients_distributed,
-                                                      unsigned long cycle, real_t global_dt);
+    // void compute_optimization_gradient_tally(Teuchos::RCP<const MV> design_weights_distributed, Teuchos::RCP<MV> design_gradients_distributed,
+    //                                                   unsigned long cycle, real_t global_dt);
 
 
     Simulation_Parameters_Explicit* simparam;
@@ -175,6 +156,7 @@ public:
     // Global FEA data
     Teuchos::RCP<MV> previous_node_states_distributed;
     Teuchos::RCP<MV> initial_node_states_distributed;
+    Teuchos::RCP<MV> node_states_distributed;
     Teuchos::RCP<MV> all_node_states_distributed;
     Teuchos::RCP<MV> all_cached_node_states_distributed;
     Teuchos::RCP<MV> cached_design_gradients_distributed;

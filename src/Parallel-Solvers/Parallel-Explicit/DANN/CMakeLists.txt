@@ -9,7 +9,7 @@ include_directories(include)
 set(SRC_Files 
 src/momentum.cpp 
 src/properties.cpp
-src/setup_sgh.cpp)
+src/setup_dann.cpp)
 
 set(FEA_Module_SRC src/FEA_Module_DANN.cpp )
 

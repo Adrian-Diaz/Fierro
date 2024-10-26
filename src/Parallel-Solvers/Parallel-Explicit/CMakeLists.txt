@@ -37,7 +37,7 @@ target_link_libraries (fierro-parallel-explicit PRIVATE
   parallel_base_src 
   material_models
   parallel_sgh_solver
-  parallel_dann
+  parallel_dann_solver
   parallel_dynamic_elastic_solver
   ${Trilinos_LIBRARIES}
   ${MPI_CXX_LIBRARIES}

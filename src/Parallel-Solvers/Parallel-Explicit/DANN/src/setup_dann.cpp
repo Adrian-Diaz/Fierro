@@ -33,9 +33,9 @@
  **********************************************************************************************/
 #include "matar.h"
 #include "state.h"
-#include "FEA_Module_SGH.h"
+#include "FEA_Module_DANN.h"
 #include "Simulation_Parameters/Simulation_Parameters_Explicit.h"
-#include "Simulation_Parameters/FEA_Module/SGH_Parameters.h"
+#include "Simulation_Parameters/FEA_Module/DANN_Parameters.h"
 #include "Explicit_Solver.h"
 
 // #define DEBUG
@@ -44,10 +44,10 @@
 ///
 /// \fn setup
 ///
-/// \brief Setup SGH solver data
+/// \brief Setup DANN solver data
 ///
 /////////////////////////////////////////////////////////////////////////////
-void FEA_Module_SGH::setup()
+void FEA_Module_DANN::setup()
 {
     const size_t rk_level         = simparam->dynamic_options.rk_num_bins - 1;
     const size_t num_fills        = simparam->regions.size();
@@ -60,16 +60,16 @@ void FEA_Module_SGH::setup()
 
 /////////////////////////////////////////////////////////////////////////////
 ///
-/// \fn sgh_interface_setup
+/// \fn dann_interface_setup
 ///
-/// \brief Interfaces read in data with the SGH solver data; currently a hack to streamline
+/// \brief Interfaces read in data with the DANN solver data; currently a hack to streamline
 ///
 /// \param State data for the nodes
 /// \param State data for the elements
 /// \param State data for the corners
 ///
 /////////////////////////////////////////////////////////////////////////////
-void FEA_Module_SGH::sgh_interface_setup(node_t& node, elem_t& elem, corner_t& corner)
+void FEA_Module_DANN::dann_interface_setup(node_t& node, elem_t& elem, corner_t& corner)
 {
     const size_t num_dim     = simparam->num_dims;
     const size_t rk_num_bins = simparam->dynamic_options.rk_num_bins;

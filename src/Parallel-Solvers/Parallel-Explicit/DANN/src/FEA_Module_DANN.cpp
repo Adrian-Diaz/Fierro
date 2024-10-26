@@ -80,13 +80,13 @@
 using namespace utils;
 
 FEA_Module_DANN::FEA_Module_DANN(
-    SGH_Parameters& params, Solver* Solver_Pointer,
+    DANN_Parameters& params, Solver* Solver_Pointer,
     std::shared_ptr<mesh_t> mesh_in, const int my_fea_module_index)
     : FEA_Module(Solver_Pointer)
 {
     // assign interfacing index
     my_fea_module_index_ = my_fea_module_index;
-    Module_Type = FEA_MODULE_TYPE::SGH;
+    Module_Type = FEA_MODULE_TYPE::DANN;
 
     // recast solver pointer for non-base class access
     Explicit_Solver_Pointer_ = dynamic_cast<Explicit_Solver*>(Solver_Pointer);
@@ -102,74 +102,15 @@ FEA_Module_DANN::FEA_Module_DANN(
     mesh = mesh_in;
 
     // set Tpetra vector pointers
-    initial_node_states_distributed = Explicit_Solver_Pointer_->initial_node_states_distributed;
-    node_states_distributed     = Explicit_Solver_Pointer_->node_states_distributed;
-    all_node_states_distributed = Explicit_Solver_Pointer_->all_node_states_distributed;
+    // initial_node_states_distributed = Explicit_Solver_Pointer_->initial_node_states_distributed;
+    // node_states_distributed     = Explicit_Solver_Pointer_->node_states_distributed;
+    // all_node_states_distributed = Explicit_Solver_Pointer_->all_node_states_distributed;
 
 }
 
 FEA_Module_DANN::~FEA_Module_DANN()
 {
     // delete simparam;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-///
-/// \fn read_conditions_ansys_dat
-///
-/// \brief Read ANSYS dat format mesh file
-///
-/////////////////////////////////////////////////////////////////////////////
-void FEA_Module_DANN::read_conditions_ansys_dat(std::ifstream* in, std::streampos before_condition_header)
-{
-    auto input_options = simparam->input_options.value();
-
-    char ch;
-    std::string skip_line, read_line, substring, token;
-    std::stringstream line_parse, line_parse2;
-
-    int num_dim = simparam->num_dims;
-    int buffer_lines = 1000;
-    int max_word     = 30;
-    int local_node_index, current_column_index;
-    int p_order = input_options.p_order;
-    int buffer_loop, buffer_iteration, buffer_iterations, scan_loop, nodes_per_element, words_per_line;
-
-    size_t read_index_start, node_rid, elem_gid;
-    size_t strain_count;
-
-    real_t unit_scaling = input_options.unit_scaling;
-    real_t dof_value;
-
-    CArrayKokkos<char, array_layout, HostSpace, memory_traits> read_buffer;
-    CArrayKokkos<long long int, array_layout, HostSpace, memory_traits> read_buffer_indices;
-
-    LO local_dof_id;
-    GO node_gid;
-
-    host_vec_array node_densities;
-} // end read_conditions_ansys_dat
-
-/////////////////////////////////////////////////////////////////////////////
-///
-/// \fn generate_bcs
-///
-/// \brief Assign sets of element boundary surfaces corresponding to user BCs
-///
-/////////////////////////////////////////////////////////////////////////////
-void FEA_Module_DANN::generate_bcs()
-{
-} // end generate_bcs
-
-/////////////////////////////////////////////////////////////////////////////
-///
-/// \fn Displacement_Boundary_Conditions
-///
-/// \brief Apply displacement boundary conditions
-///
-/////////////////////////////////////////////////////////////////////////////
-void FEA_Module_DANN::Displacement_Boundary_Conditions()
-{
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -231,37 +172,6 @@ void FEA_Module_DANN::write_data(std::map<std::string, const double*>& point_dat
         } // end switch
     } // end if
 
-    // element "mat_id" //uncomment if needed (works fine)
-    // sgh_module->elem_mat_id.update_host();
-    // cell_data_scalars_int["mat_id"] = reinterpret_cast<int*>(&sgh_module->elem_mat_id.host(0));
-
-    // element "user_output_vars" //uncomment if needed (works fine)
-    // sgh_module->elem_user_output_vars.update_host();
-    // cell_data_fields_double["user_output_vars"] = std::make_pair(&sgh_module->elem_user_output_vars.host_pointer(),
-    //                                                             sgh_module->elem_user_output_vars.dims(1));
-
-    // element "stress" //uncomment if needed (works fine)
-    // sgh_module->elem_stress.update_host();
-    // cell_data_fields_double["stress"] = std::make_pair(&sgh_module->elem_stress.host(rk_level,0,0,0), 9);
-}
-
-/////////////////////////////////////////////////////////////////////////////
-///
-/// \fn sort_element_output
-///
-/// \brief Prompts sorting for elementoutput data. For now, density.
-///
-/////////////////////////////////////////////////////////////////////////////
-void FEA_Module_DANN::sort_element_output(Teuchos::RCP<Tpetra::Map<LO, GO, node_type>> sorted_map)
-{
-    // interface element density data
-    {
-        host_vec_array Element_Densities = Global_Element_Densities->getLocalView<HostSpace>(Tpetra::Access::ReadWrite);
-        elem_den.update_host();
-        for (int ielem = 0; ielem < rnum_elem; ielem++) {
-            Element_Densities(ielem, 0) = elem_den.host(ielem);
-        }
-    }
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -301,18 +211,6 @@ void FEA_Module_DANN::comm_variables(Teuchos::RCP<const MV> zp)
 
 /////////////////////////////////////////////////////////////////////////////
 ///
-/// \fn node_density_constraints
-///
-/// \brief Enforce density constraints on nodes due to BCS
-///
-/////////////////////////////////////////////////////////////////////////////
-void FEA_Module_DANN::node_density_constraints(host_vec_array node_densities_lower_bound)
-{
-    const size_t    num_dim = mesh->num_dims;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-///
 /// \fn solve
 ///
 /// \brief Solve function called by solver
@@ -327,9 +225,9 @@ int FEA_Module_DANN::solve()
 
 /////////////////////////////////////////////////////////////////////////////
 ///
-/// \fn sgh_solve
+/// \fn dann_solve
 ///
-/// \brief SGH solver loop
+/// \brief DANN solver loop
 ///
 /////////////////////////////////////////////////////////////////////////////
 void FEA_Module_DANN::dann_solve()
@@ -342,4 +240,4 @@ void FEA_Module_DANN::dann_solve()
     const DCArrayKokkos<boundary_t> boundary = module_params->boundary;
     const DCArrayKokkos<material_t> material = simparam->material;
 
-} // end of SGH solve
+} // end of DANN solve

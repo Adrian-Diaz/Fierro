@@ -32,12 +32,12 @@
  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **********************************************************************************************/
 #include "state.h"
-#include "FEA_Module_SGH.h"
-#include "Simulation_Parameters/FEA_Module/SGH_Parameters.h"
+#include "FEA_Module_DANN.h"
+#include "Simulation_Parameters/FEA_Module/DANN_Parameters.h"
 
 /////////////////////////////////////////////////////////////////////////////
 ///
-/// \fn update_velocity_sgh
+/// \fn update_dann
 ///
 /// \brief This function evolves the velocity at the nodes of the mesh
 ///
@@ -47,7 +47,7 @@
 /// \param View of the corner forces
 ///
 /////////////////////////////////////////////////////////////////////////////
-void FEA_Module_SGH::update_state_dann(double rk_alpha,
+void FEA_Module_DANN::update_state_dann(double rk_alpha,
                                        const size_t num_nodes,
                                        DViewCArrayKokkos<double>& node_states)
 {

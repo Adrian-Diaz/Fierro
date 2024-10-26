@@ -61,18 +61,17 @@ struct boundary_t;
 ///
 /// \class FEA_Module_DANN
 ///
-/// \brief Class for containing functions required to perform SGH
+/// \brief Class for containing functions required for DANN
 ///
-/// This class containts the requisite functions requited to perform
-/// staggered grid hydrodynamics (SGH) which is equivalent to a lumped
-/// mass finite element (FE) scheme.
+/// This class containts the requisite functions requited to use
+/// a Dynamic Artificial Neural Network (DANN).
 ///
 /////////////////////////////////////////////////////////////////////////////
 class FEA_Module_DANN : public FEA_Module
 {
 public:
 
-    FEA_Module_DANN(SGH_Parameters& params, Solver* Solver_Pointer, std::shared_ptr<mesh_t> mesh_in, const int my_fea_module_index = 0);
+    FEA_Module_DANN(DANN_Parameters& params, Solver* Solver_Pointer, std::shared_ptr<mesh_t> mesh_in, const int my_fea_module_index = 0);
     ~FEA_Module_DANN();
 
     // initialize data for boundaries of the model and storage for boundary conditions and applied loads
@@ -89,8 +88,6 @@ public:
     void update_state_dann(double rk_alpha,
                              const size_t num_nodes,
                              DViewCArrayKokkos<double>& node_states);
-
-    void init_assembly();
 
     void update_state(const DCArrayKokkos<material_t>& material,
                       const mesh_t& mesh,
@@ -109,8 +106,6 @@ public:
     void output_control();
 
     void sort_output(Teuchos::RCP<Tpetra::Map<LO, GO, node_type>> sorted_map);
-
-    void sort_element_output(Teuchos::RCP<Tpetra::Map<LO, GO, node_type>> sorted_map);
 
     void collect_output(Teuchos::RCP<Tpetra::Map<LO, GO, node_type>> global_reduce_map);
 

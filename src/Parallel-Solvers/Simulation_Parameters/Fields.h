@@ -22,5 +22,6 @@ SERIALIZABLE_ENUM(FIELD,
   displaced_mesh,
   temperature,
   temperature_gradient,
-  heat_flux
+  heat_flux,
+  state
 )

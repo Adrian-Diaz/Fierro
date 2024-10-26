@@ -33,7 +33,7 @@
  **********************************************************************************************/
 #include "state.h"
 #include "mesh.h"
-#include "FEA_Module_SGH.h"
+#include "FEA_Module_DANN.h"
 
 /////////////////////////////////////////////////////////////////////////////
 ///
@@ -48,7 +48,7 @@
 /// \param The current cycle index
 ///
 /////////////////////////////////////////////////////////////////////////////
-void FEA_Module_SGH::update_state(const DCArrayKokkos<material_t>& material,
+void FEA_Module_DANN::update_state(const DCArrayKokkos<material_t>& material,
     const mesh_t& mesh,
     const DViewCArrayKokkos<double>& node_states,
     const double rk_alpha,

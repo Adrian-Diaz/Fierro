@@ -105,6 +105,11 @@ FEA_Module_DANN::FEA_Module_DANN(
     // initial_node_states_distributed = Explicit_Solver_Pointer_->initial_node_states_distributed;
     // node_states_distributed     = Explicit_Solver_Pointer_->node_states_distributed;
     // all_node_states_distributed = Explicit_Solver_Pointer_->all_node_states_distributed;
+    
+    initial_node_states_distributed = Teuchos::rcp(new MV(map, 1));
+    all_node_states_distributed = Teuchos::rcp(new MV(all_node_map, 1));
+    previous_node_states_distributed = Teuchos::rcp(new MV(all_node_map, 1));
+    node_states_distributed = Teuchos::rcp(new MV(*all_node_states_distributed, map));
 
 }
 
@@ -240,4 +245,5 @@ void FEA_Module_DANN::dann_solve()
     const DCArrayKokkos<boundary_t> boundary = module_params->boundary;
     const DCArrayKokkos<material_t> material = simparam->material;
 
+    std::cout << "DANN SOLVER CALLED " << std::endl;
 } // end of DANN solve

@@ -245,5 +245,7 @@ void FEA_Module_DANN::dann_solve()
     const DCArrayKokkos<boundary_t> boundary = module_params->boundary;
     const DCArrayKokkos<material_t> material = simparam->material;
 
-    std::cout << "DANN SOLVER CALLED " << std::endl;
+    //std::cout << "DANN SOLVER CALLED " << std::endl;
+    
+    distributed_weights->apply(*previous_node_states_distributed,*node_states_distributed);
 } // end of DANN solve

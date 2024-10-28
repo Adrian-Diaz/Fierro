@@ -79,6 +79,8 @@ public:
 
     void setup();
 
+    void init_assembly();
+
     int solve();
 
     //void checkpoint_solve(std::set<Dynamic_Checkpoint>::iterator start_checkpoint, size_t bounding_timestep);
@@ -165,7 +167,9 @@ public:
 
     // Local FEA data
     DCArrayKokkos<size_t, array_layout, device_type, memory_traits>      Global_Gradient_Matrix_Assembly_Map; // Maps element local nodes to columns on ragged right node connectivity graph
-    RaggedRightArrayKokkos<LO, array_layout, device_type, memory_traits> Graph_Matrix; // stores local indices
+    RaggedRightArrayKokkos<GO, array_layout, device_type, memory_traits> Graph_Matrix; // stores local indices
+    RaggedRightArrayKokkos<real_t, Kokkos::LayoutRight, device_type, memory_traits, array_layout> Weight_Matrix;
+    RaggedRightArrayKokkos<real_t, Kokkos::LayoutRight, device_type, memory_traits, array_layout> Gradient_Matrix;
     DCArrayKokkos<size_t, array_layout, device_type, memory_traits>          Gradient_Matrix_Strides;
     DCArrayKokkos<size_t, array_layout, device_type, memory_traits>          Graph_Matrix_Strides;
     RaggedRightArrayKokkos<real_t, array_layout, device_type, memory_traits> Original_Gradient_Entries;
@@ -174,6 +178,7 @@ public:
 
     // distributed matrices
     Teuchos::RCP<MAT> distributed_weights;
+    Teuchos::RCP<MAT> distributed_gradient_matrix;
 
     std::vector<real_t> time_data;
     int max_time_steps, last_time_step;

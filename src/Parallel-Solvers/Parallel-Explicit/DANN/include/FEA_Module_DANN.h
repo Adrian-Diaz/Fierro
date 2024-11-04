@@ -155,6 +155,7 @@ public:
     Teuchos::RCP<MV> initial_node_states_distributed;
     Teuchos::RCP<MV> node_states_distributed;
     Teuchos::RCP<MV> all_node_states_distributed;
+    Teuchos::RCP<MV> all_previous_node_states_distributed;
     Teuchos::RCP<MV> all_cached_node_states_distributed;
     Teuchos::RCP<MV> cached_design_gradients_distributed;
     Teuchos::RCP<MV> all_adjoint_vector_distributed, adjoint_vector_distributed;

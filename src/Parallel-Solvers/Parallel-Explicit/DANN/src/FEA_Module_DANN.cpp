@@ -108,7 +108,8 @@ FEA_Module_DANN::FEA_Module_DANN(
     
     initial_node_states_distributed = Teuchos::rcp(new MV(map, 1));
     all_node_states_distributed = Teuchos::rcp(new MV(all_node_map, 1));
-    previous_node_states_distributed = Teuchos::rcp(new MV(all_node_map, 1));
+    all_previous_node_states_distributed = Teuchos::rcp(new MV(all_node_map, 1));
+    previous_node_states_distributed = Teuchos::rcp(new MV(*all_previous_node_states_distributed, map));
     node_states_distributed = Teuchos::rcp(new MV(*all_node_states_distributed, map));
 
 }
@@ -243,9 +244,30 @@ void FEA_Module_DANN::dann_solve()
     const size_t rk_level = dynamic_options.rk_num_bins - 1;
 
     const DCArrayKokkos<boundary_t> boundary = module_params->boundary;
-    const DCArrayKokkos<material_t> material = simparam->material;
 
-    //std::cout << "DANN SOLVER CALLED " << std::endl;
+    int print_cycle = dynamic_options.print_cycle;
+
+    graphics_time    = simparam->output_options.graphics_step;
+    graphics_dt_ival = simparam->output_options.graphics_step;
+    cycle_stop     = dynamic_options.cycle_stop;
+    graphics_times = simparam->output_options.graphics_times;
+    graphics_id    = simparam->output_options.graphics_id;
+
+    if(myrank==0){
+        std::cout << "DANN SOLVER CALLED " << std::endl;
+    }
+    distributed_weights->setAllToScalar(1);
+    previous_node_states_distributed->putScalar(1);
+    //comm to all here
+    all_previous_node_states_distributed->doImport(*previous_node_states_distributed, *importer, Tpetra::INSERT);
+    for(int istep = 0; istep < cycle_stop; istep++){
+        distributed_weights->apply(*previous_node_states_distributed,*node_states_distributed);
+        //comm to all here
+        all_node_states_distributed->doImport(*node_states_distributed, *importer, Tpetra::INSERT);
+        all_previous_node_states_distributed->assign(*all_node_states_distributed);
+    }
+
+    //output state vector
+    node_states_distributed->describe(*fos, Teuchos::VERB_EXTREME);
     
-    distributed_weights->apply(*previous_node_states_distributed,*node_states_distributed);
 } // end of DANN solve

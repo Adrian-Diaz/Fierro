@@ -244,6 +244,7 @@ void FEA_Module_DANN::dann_solve()
     const size_t rk_level = dynamic_options.rk_num_bins - 1;
 
     const DCArrayKokkos<boundary_t> boundary = module_params->boundary;
+    int batch_size = module_params->batch_size;
 
     int print_cycle = dynamic_options.print_cycle;
 

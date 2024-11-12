@@ -4,13 +4,13 @@ dynamic_options:
   dt_min: 1.e-8
   dt_max: 1.e-2
   dt_start: 1.e-5
-  cycle_stop: 2000000
+  cycle_stop: 2
 
 mesh_generation_options:
   type: Box
   origin: [0, 0, 0]
   length: [1.2, 1.2, 1.2]
-  num_elems: [32, 32, 32]
+  num_elems: [10, 10,10]
 
 output_options:
   timer_output_level: thorough
@@ -20,6 +20,11 @@ output_options:
 fea_module_parameters:
   - type: DANN
     material_id: 0
+    batch_size: 1000
+    training_input_data_filename: x_train.txt
+    testing_input_data_filename: x_test.txt
+    training_output_data_filename: y_train.txt
+    testing_output_data_filename: y_test.txt
 
 materials:
   - id: 0

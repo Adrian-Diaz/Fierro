@@ -60,6 +60,11 @@ void FEA_Module_DANN::setup()
     bool shape_optimization_on    = simparam->shape_optimization_on;
 
     init_assembly();
+
+    //read in training and test data
+    read_training_data();
+    read_testing_data();
+
     
 } // end of setup
 
@@ -333,4 +338,22 @@ void FEA_Module_DANN::init_assembly(){
   distributed_weights->fillComplete();
   
 }
+
+/* ----------------------------------------------------------------------
+   Read in model training data
+------------------------------------------------------------------------- */
+void FEA_Module_DANN::read_training_data()
+{
+
+    
+} // end of read_training_data
+
+/* ----------------------------------------------------------------------
+   Read in model testing data
+------------------------------------------------------------------------- */
+void FEA_Module_DANN::read_testing_data()
+{
+
+    
+} // end of read_testing_data
 

@@ -81,6 +81,10 @@ public:
 
     void init_assembly();
 
+    void read_training_data();
+
+    void read_testing_data();
+
     int solve();
 
     //void checkpoint_solve(std::set<Dynamic_Checkpoint>::iterator start_checkpoint, size_t bounding_timestep);
@@ -149,6 +153,10 @@ public:
     // node ids in node
     RaggedRightArrayKokkos<size_t> nodes_in_node;
     CArrayKokkos<size_t> num_nodes_in_node;
+
+    //local node data
+    size_t num_local_input_nodes;
+    size_t num_local_output_nodes;
 
     // Global FEA data
     Teuchos::RCP<MV> previous_node_states_distributed;

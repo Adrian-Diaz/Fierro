@@ -106,11 +106,13 @@ FEA_Module_DANN::FEA_Module_DANN(
     // node_states_distributed     = Explicit_Solver_Pointer_->node_states_distributed;
     // all_node_states_distributed = Explicit_Solver_Pointer_->all_node_states_distributed;
     
-    initial_node_states_distributed = Teuchos::rcp(new MV(map, 1));
-    all_node_states_distributed = Teuchos::rcp(new MV(all_node_map, 1));
-    all_previous_node_states_distributed = Teuchos::rcp(new MV(all_node_map, 1));
+    size_t batch_size = module_params->batch_size;
+    initial_node_states_distributed = Teuchos::rcp(new MV(map, batch_size));
+    all_node_states_distributed = Teuchos::rcp(new MV(all_node_map, batch_size));
+    all_previous_node_states_distributed = Teuchos::rcp(new MV(all_node_map, batch_size));
     previous_node_states_distributed = Teuchos::rcp(new MV(*all_previous_node_states_distributed, map));
     node_states_distributed = Teuchos::rcp(new MV(*all_node_states_distributed, map));
+    num_local_input_nodes = num_local_output_nodes = 0;
 
 }
 
@@ -244,7 +246,13 @@ void FEA_Module_DANN::dann_solve()
     const size_t rk_level = dynamic_options.rk_num_bins - 1;
 
     const DCArrayKokkos<boundary_t> boundary = module_params->boundary;
-    int batch_size = module_params->batch_size;
+    size_t batch_size = module_params->batch_size;
+    size_t num_training_data = module_params->num_training_data;
+    size_t num_testing_data = module_params->num_testing_data;
+    size_t num_batches = num_training_data/batch_size;
+    size_t num_input_nodes = module_params->num_input_nodes;
+    size_t num_output_nodes = module_params->num_output_nodes;
+    if(num_training_data%batch_size!=0) num_batches++;
 
     int print_cycle = dynamic_options.print_cycle;
 
@@ -258,7 +266,16 @@ void FEA_Module_DANN::dann_solve()
         std::cout << "DANN SOLVER CALLED " << std::endl;
     }
     distributed_weights->setAllToScalar(1);
-    previous_node_states_distributed->putScalar(1);
+    //initialize state to 0 everywhere
+    previous_node_states_distributed->putScalar(0);
+    //assign initial state for each entry in this batch
+    for(int ibatch = 0; ibatch < batch_size; ibatch++){
+        //assign input data to input nodes for ibatch entry
+        for(int iinput = 0; iinput < num_local_input_nodes; iinput++){
+            //assign data to input nodes on this rank (chosen 0:num_input-1 global indices for now)
+        }
+    }
+    //previous_node_states_distributed->putScalar(1);
     //comm to all here
     all_previous_node_states_distributed->doImport(*previous_node_states_distributed, *importer, Tpetra::INSERT);
     for(int istep = 0; istep < cycle_stop; istep++){

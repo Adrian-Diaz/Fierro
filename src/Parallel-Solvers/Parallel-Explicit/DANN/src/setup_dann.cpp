@@ -41,6 +41,7 @@
 #include "Tpetra_Details_makeColMap.hpp"
 #include "Tpetra_Import_Util2.hpp"
 
+#define MAX_WORD 30
 // #define DEBUG
 
 /////////////////////////////////////////////////////////////////////////////
@@ -344,7 +345,132 @@ void FEA_Module_DANN::init_assembly(){
 ------------------------------------------------------------------------- */
 void FEA_Module_DANN::read_training_data()
 {
+  char ch;
+  std::string skip_line, read_line, substring;
+  std::stringstream line_parse;
 
+  size_t num_input_nodes = module_params->num_input_nodes;
+  size_t num_output_nodes = module_params->num_output_nodes;
+  std::string training_input_data_filename = module_params->training_input_data_filename;
+  std::string training_output_data_filename = module_params->training_output_data_filename;
+  size_t buffer_size = module_params->read_buffer_size;
+  size_t batch_size = module_params->batch_size;
+  int local_node_index;
+  size_t batch_id;
+  int buffer_loop, buffer_iteration, buffer_iterations, scan_loop;
+
+  size_t read_index_start, node_rid, elem_gid;
+  size_t strain_count;
+
+  GO     node_gid;
+  real_t dof_value;
+
+  CArrayKokkos<char, array_layout, HostSpace, memory_traits> read_buffer;
+
+  // read the input training data
+  if (myrank == 0)
+  {
+      std::cout << " INPUT DATA DIM IS " << num_input_nodes << std::endl;
+      input_training_file = new std::ifstream();
+      input_training_file->open(training_input_data_filename);
+
+  } // end if(myrank==0)
+
+  // scope ensures view is destroyed for now to avoid calling a device view with an active host view later
+  {
+      host_vec_array node_states = previous_node_states_distributed->getLocalView<HostSpace>(Tpetra::Access::ReadWrite);
+      /*only task 0 reads in data from the input file
+      stores data in a buffer and communicates once the buffer cap is reached
+      or the data ends*/
+
+      // allocate read buffer
+      read_buffer = CArrayKokkos<char, array_layout, HostSpace, memory_traits>(buffer_size, num_input_nodes, MAX_WORD);
+
+      buffer_iterations = batch_size / buffer_size;
+      if (batch_size % buffer_size != 0)
+      {
+          buffer_iterations++;
+      }
+
+      // read coords
+      read_index_start = 0;
+      for (buffer_iteration = 0; buffer_iteration < buffer_iterations; buffer_iteration++)
+      {
+          // pack buffer on rank 0
+          if (myrank == 0 && buffer_iteration < buffer_iterations - 1)
+          {
+              for (buffer_loop = 0; buffer_loop < buffer_size; buffer_loop++)
+              {
+                  getline(*input_training_file, read_line);
+                  line_parse.clear();
+                  line_parse.str(read_line);
+
+                  for (int iword = 0; iword < num_input_nodes; iword++)
+                  {
+                      // read portions of the line into the substring variable
+                      line_parse >> substring;
+                      // debug print
+                      // std::cout<<" "<< substring <<std::endl;
+                      // assign the substring variable as a word of the read buffer
+                      strcpy(&read_buffer(buffer_loop, iword, 0), substring.c_str());
+                  }
+              }
+          }
+          else if (myrank == 0)
+          {
+              buffer_loop = 0;
+              while (buffer_iteration * buffer_size + buffer_loop < num_nodes) {
+                  getline(*input_training_file, read_line);
+                  line_parse.clear();
+                  line_parse.str(read_line);
+                  for (int iword = 0; iword < num_input_nodes; iword++)
+                  {
+                      // read portions of the line into the substring variable
+                      line_parse >> substring;
+                      // debug print
+                      // std::cout<<" "<< substring <<std::endl;
+                      // assign the substring variable as a word of the read buffer
+                      strcpy(&read_buffer(buffer_loop, iword, 0), substring.c_str());
+                  }
+                  buffer_loop++;
+              }
+          }
+
+          // broadcast buffer to all ranks; each rank will determine which nodes in the buffer belong
+          MPI_Bcast(read_buffer.pointer(), buffer_size * num_input_nodes * MAX_WORD, MPI_CHAR, 0, world);
+          // broadcast how many nodes were read into this buffer iteration
+          MPI_Bcast(&buffer_loop, 1, MPI_INT, 0, world);
+
+          // debug_print
+          // std::cout << "NODE BUFFER LOOP IS: " << buffer_loop << std::endl;
+          // for(int iprint=0; iprint < buffer_loop; iprint++)
+          // std::cout<<"buffer packing: " << std::string(&read_buffer(iprint,0,0)) << std::endl;
+          // return;
+
+          // determine which data to store in the swage mesh members (the local node data)
+          // loop through read buffer
+          for (scan_loop = 0; scan_loop < buffer_loop; scan_loop++)
+          {
+              // set global node id (ensight specific order)
+              batch_id = read_index_start + scan_loop;
+              // let map decide if this node id belongs locally; if yes store data
+              for (int inode = 0; inode < num_input_nodes; inode++)
+              {
+                node_gid = inode; //we assume input nodes will be the first 0:num_input_nodes-1 global nodes
+                if (map->isNodeGlobalElement(node_gid))
+                {
+                    // set local node index in this mpi rank
+                    node_rid = map->getLocalElement(node_gid);
+                    // extract nodal position from the read buffer
+                    // for tecplot format this is the three coords in the same line
+                    dof_value = atof(&read_buffer(scan_loop, node_gid, 0));
+                    node_states(node_rid, batch_id) = dof_value;
+                }
+              }
+          }
+          read_index_start += buffer_size;
+      }
+  } // end of coordinate readin
     
 } // end of read_training_data
 

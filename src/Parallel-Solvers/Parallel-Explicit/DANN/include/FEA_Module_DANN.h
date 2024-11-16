@@ -158,7 +158,7 @@ public:
     size_t num_local_input_nodes;
     size_t num_local_output_nodes;
 
-    // Global FEA data
+    // Global node data
     Teuchos::RCP<MV> previous_node_states_distributed;
     Teuchos::RCP<MV> initial_node_states_distributed;
     Teuchos::RCP<MV> node_states_distributed;
@@ -174,7 +174,17 @@ public:
     // TpetraPartitionMap<long long int, array_layout, device_type, memory_traits> mtr_map;
     // TpetraPartitionMap<long long int, array_layout, device_type, memory_traits> mtr_local_map;
 
-    // Local FEA data
+    //training and testing data
+    DCArrayKokkos<real_t, array_layout, device_type, memory_traits>      Input_Training_Data_Batch;
+    DCArrayKokkos<real_t, array_layout, device_type, memory_traits>      Input_Testing_Data_Batch;
+    DCArrayKokkos<real_t, array_layout, device_type, memory_traits>      Output_Training_Data_Batch;
+    DCArrayKokkos<real_t, array_layout, device_type, memory_traits>      Output_Testing_Data_Batch;
+    std::ifstream* input_training_file = NULL;
+    std::ifstream* input_testing_file = NULL;
+    std::ifstream* output_training_file = NULL;
+    std::ifstream* output_testing_file = NULL;
+
+    // Local connectivity data
     DCArrayKokkos<size_t, array_layout, device_type, memory_traits>      Global_Gradient_Matrix_Assembly_Map; // Maps element local nodes to columns on ragged right node connectivity graph
     RaggedRightArrayKokkos<GO, array_layout, device_type, memory_traits> Graph_Matrix; // stores local indices
     RaggedRightArrayKokkos<real_t, Kokkos::LayoutRight, device_type, memory_traits, array_layout> Weight_Matrix;

@@ -267,7 +267,7 @@ void FEA_Module_DANN::dann_solve()
     }
     distributed_weights->setAllToScalar(1);
     //initialize state to 0 everywhere
-    previous_node_states_distributed->putScalar(0);
+    //previous_node_states_distributed->putScalar(0);
     //assign initial state for each entry in this batch
     for(int ibatch = 0; ibatch < batch_size; ibatch++){
         //assign input data to input nodes for ibatch entry

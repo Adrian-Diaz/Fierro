@@ -183,6 +183,7 @@ public:
     std::ifstream* input_testing_file = NULL;
     std::ifstream* output_training_file = NULL;
     std::ifstream* output_testing_file = NULL;
+    bool first_training_batch_read, first_testing_batch_read;
 
     // Local connectivity data
     DCArrayKokkos<size_t, array_layout, device_type, memory_traits>      Global_Gradient_Matrix_Assembly_Map; // Maps element local nodes to columns on ragged right node connectivity graph

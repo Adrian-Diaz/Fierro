@@ -11,6 +11,7 @@ struct DANN_Parameters
     size_t num_output_nodes = 1;
     size_t num_training_data = 1;
     size_t num_testing_data = 1;
+    bool sparse_categories = true;
     std::string training_input_data_filename = "training_input_data.txt";
     std::string testing_input_data_filename = "testing_input_data.txt";
     std::string training_output_data_filename = "training_output_data.txt";
@@ -27,4 +28,5 @@ struct DANN_Parameters
 IMPL_YAML_SERIALIZABLE_WITH_BASE(DANN_Parameters, FEA_Module_Parameters,
                                  batch_size, training_input_data_filename, training_output_data_filename,
                                  testing_input_data_filename, testing_output_data_filename, num_input_nodes,
-                                 num_output_nodes, num_training_data, num_testing_data, read_buffer_size)
+                                 num_output_nodes, num_training_data, num_testing_data, read_buffer_size,
+                                 sparse_categories)

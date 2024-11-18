@@ -107,13 +107,16 @@ FEA_Module_DANN::FEA_Module_DANN(
     // all_node_states_distributed = Explicit_Solver_Pointer_->all_node_states_distributed;
     
     size_t batch_size = module_params->batch_size;
+    size_t num_output_nodes = (module_params->sparse_categories) ? 1 : module_params->num_output_nodes;
     initial_node_states_distributed = Teuchos::rcp(new MV(map, batch_size));
     all_node_states_distributed = Teuchos::rcp(new MV(all_node_map, batch_size));
     all_previous_node_states_distributed = Teuchos::rcp(new MV(all_node_map, batch_size));
     previous_node_states_distributed = Teuchos::rcp(new MV(*all_previous_node_states_distributed, map));
     node_states_distributed = Teuchos::rcp(new MV(*all_node_states_distributed, map));
     num_local_input_nodes = num_local_output_nodes = 0;
+    first_testing_batch_read = first_training_batch_read = true;
 
+    Output_Training_Data_Batch = DCArrayKokkos<real_t, array_layout, device_type, memory_traits>(num_output_nodes, batch_size, "Output training data");
 }
 
 FEA_Module_DANN::~FEA_Module_DANN()

@@ -64,8 +64,9 @@ void FEA_Module_DANN::setup()
 
     //read in training and test data
     read_training_data();
+    first_training_batch_read = false;
     read_testing_data();
-
+    first_testing_batch_read = false;
     
 } // end of setup
 
@@ -350,7 +351,9 @@ void FEA_Module_DANN::read_training_data()
   std::stringstream line_parse;
 
   size_t num_input_nodes = module_params->num_input_nodes;
-  size_t num_output_nodes = module_params->num_output_nodes;
+  bool sparse_categories = module_params->sparse_categories;
+  size_t num_output_nodes = (sparse_categories) ? 1 : module_params->num_output_nodes;
+  size_t num_training_data = module_params->num_training_data;
   std::string training_input_data_filename = module_params->training_input_data_filename;
   std::string training_output_data_filename = module_params->training_output_data_filename;
   size_t buffer_size = module_params->read_buffer_size;
@@ -368,7 +371,7 @@ void FEA_Module_DANN::read_training_data()
   CArrayKokkos<char, array_layout, HostSpace, memory_traits> read_buffer;
 
   // read the input training data
-  if (myrank == 0)
+  if (myrank == 0&&first_training_batch_read)
   {
       std::cout << " INPUT DATA DIM IS " << num_input_nodes << std::endl;
       input_training_file = new std::ifstream();
@@ -392,7 +395,9 @@ void FEA_Module_DANN::read_training_data()
           buffer_iterations++;
       }
 
-      // read coords
+      size_t read_limit = batch_size; //alter to choose remainder between current batch read and available training points later
+
+      // read data
       read_index_start = 0;
       for (buffer_iteration = 0; buffer_iteration < buffer_iterations; buffer_iteration++)
       {
@@ -419,7 +424,7 @@ void FEA_Module_DANN::read_training_data()
           else if (myrank == 0)
           {
               buffer_loop = 0;
-              while (buffer_iteration * buffer_size + buffer_loop < num_nodes) {
+              while (buffer_iteration * buffer_size + buffer_loop < read_limit) {
                   getline(*input_training_file, read_line);
                   line_parse.clear();
                   line_parse.str(read_line);
@@ -461,8 +466,6 @@ void FEA_Module_DANN::read_training_data()
                 {
                     // set local node index in this mpi rank
                     node_rid = map->getLocalElement(node_gid);
-                    // extract nodal position from the read buffer
-                    // for tecplot format this is the three coords in the same line
                     dof_value = atof(&read_buffer(scan_loop, node_gid, 0));
                     node_states(node_rid, batch_id) = dof_value;
                 }
@@ -470,7 +473,103 @@ void FEA_Module_DANN::read_training_data()
           }
           read_index_start += buffer_size;
       }
-  } // end of coordinate readin
+  } // end of input data readin
+
+  //read output training data
+  if (myrank == 0&&first_training_batch_read)
+  {
+      std::cout << " OUTPUT DATA DIM IS " << num_output_nodes << std::endl;
+      output_training_file = new std::ifstream();
+      output_training_file->open(training_output_data_filename);
+  } // end if(myrank==0)
+  /*only task 0 reads in data from the input file
+  stores data in a buffer and communicates once the buffer cap is reached
+  or the data ends*/
+
+  // allocate read buffer
+  read_buffer = CArrayKokkos<char, array_layout, HostSpace, memory_traits>(buffer_size, num_output_nodes, MAX_WORD);
+
+  buffer_iterations = batch_size / buffer_size;
+  if (batch_size % buffer_size != 0)
+  {
+      buffer_iterations++;
+  }
+
+  size_t read_limit = batch_size; //alter to choose remainder between current batch read and available training points later
+
+  // read data
+  read_index_start = 0;
+  for (buffer_iteration = 0; buffer_iteration < buffer_iterations; buffer_iteration++)
+  {
+      // pack buffer on rank 0
+      if (myrank == 0 && buffer_iteration < buffer_iterations - 1)
+      {
+          for (buffer_loop = 0; buffer_loop < buffer_size; buffer_loop++)
+          {
+              getline(*output_training_file, read_line);
+              line_parse.clear();
+              line_parse.str(read_line);
+
+              for (int iword = 0; iword < num_output_nodes; iword++)
+              {
+                  // read portions of the line into the substring variable
+                  line_parse >> substring;
+                  // debug print
+                  // std::cout<<" "<< substring <<std::endl;
+                  // assign the substring variable as a word of the read buffer
+                  strcpy(&read_buffer(buffer_loop, iword, 0), substring.c_str());
+              }
+          }
+      }
+      else if (myrank == 0)
+      {
+          buffer_loop = 0;
+          while (buffer_iteration * buffer_size + buffer_loop < read_limit) {
+              getline(*output_training_file, read_line);
+              line_parse.clear();
+              line_parse.str(read_line);
+              for (int iword = 0; iword < num_output_nodes; iword++)
+              {
+                  // read portions of the line into the substring variable
+                  line_parse >> substring;
+                  // debug print
+                  // std::cout<<" "<< substring <<std::endl;
+                  // assign the substring variable as a word of the read buffer
+                  strcpy(&read_buffer(buffer_loop, iword, 0), substring.c_str());
+              }
+              buffer_loop++;
+          }
+      }
+
+      // broadcast buffer to all ranks; each rank will determine which nodes in the buffer belong
+      MPI_Bcast(read_buffer.pointer(), buffer_size * num_output_nodes * MAX_WORD, MPI_CHAR, 0, world);
+      // broadcast how many nodes were read into this buffer iteration
+      MPI_Bcast(&buffer_loop, 1, MPI_INT, 0, world);
+
+      // debug_print
+      // std::cout << "NODE BUFFER LOOP IS: " << buffer_loop << std::endl;
+      // for(int iprint=0; iprint < buffer_loop; iprint++)
+      // std::cout<<"buffer packing: " << std::string(&read_buffer(iprint,0,0)) << std::endl;
+      // return;
+
+      // determine which data to store in the swage mesh members (the local node data)
+      // loop through read buffer
+      for (scan_loop = 0; scan_loop < buffer_loop; scan_loop++)
+      {
+          // set global node id (ensight specific order)
+          batch_id = read_index_start + scan_loop;
+          // let map decide if this node id belongs locally; if yes store data
+          for (int inode = 0; inode < num_output_nodes; inode++)
+          {
+            dof_value = atof(&read_buffer(scan_loop, inode, 0));
+            //we assume output nodes will be the last num_node-1:num_input_nodes-1-num_output_nodes global nodes
+            //node_gid = (sparse_categories) num_nodes-1-dof_value : num_nodes-1-inode;
+            Output_Training_Data_Batch(inode,batch_id) = dof_value;
+          }
+      }
+      read_index_start += buffer_size;
+  }
+  // end of output data readin
     
 } // end of read_training_data
 

@@ -264,31 +264,30 @@ void FEA_Module_DANN::dann_solve()
     cycle_stop     = dynamic_options.cycle_stop;
     graphics_times = simparam->output_options.graphics_times;
     graphics_id    = simparam->output_options.graphics_id;
-
+    
+    distributed_weights->setAllToScalar(1);
     if(myrank==0){
         std::cout << "DANN SOLVER CALLED " << std::endl;
     }
-    distributed_weights->setAllToScalar(1);
-    //initialize state to 0 everywhere
-    //previous_node_states_distributed->putScalar(0);
-    //assign initial state for each entry in this batch
-    for(int ibatch = 0; ibatch < batch_size; ibatch++){
-        //assign input data to input nodes for ibatch entry
-        for(int iinput = 0; iinput < num_local_input_nodes; iinput++){
-            //assign data to input nodes on this rank (chosen 0:num_input-1 global indices for now)
+
+    for(size_t ibatch = 0; ibatch < num_batches; ibatch++){
+        //read in training and test data in batches
+        read_training_data(ibatch);
+        first_training_batch_read = false;
+        //read_testing_data(ibatch);
+        //first_testing_batch_read = false;
+        
+        //previous_node_states_distributed->putScalar(1);
+        //comm to all here
+        all_previous_node_states_distributed->doImport(*previous_node_states_distributed, *importer, Tpetra::INSERT);
+        for(int istep = 0; istep < cycle_stop; istep++){
+            distributed_weights->apply(*previous_node_states_distributed,*node_states_distributed);
+            //comm to all here
+            all_node_states_distributed->doImport(*node_states_distributed, *importer, Tpetra::INSERT);
+            all_previous_node_states_distributed->assign(*all_node_states_distributed);
         }
     }
-    //previous_node_states_distributed->putScalar(1);
-    //comm to all here
-    all_previous_node_states_distributed->doImport(*previous_node_states_distributed, *importer, Tpetra::INSERT);
-    for(int istep = 0; istep < cycle_stop; istep++){
-        distributed_weights->apply(*previous_node_states_distributed,*node_states_distributed);
-        //comm to all here
-        all_node_states_distributed->doImport(*node_states_distributed, *importer, Tpetra::INSERT);
-        all_previous_node_states_distributed->assign(*all_node_states_distributed);
-    }
-
     //output state vector
-    node_states_distributed->describe(*fos, Teuchos::VERB_EXTREME);
+    //node_states_distributed->describe(*fos, Teuchos::VERB_EXTREME);
     
 } // end of DANN solve

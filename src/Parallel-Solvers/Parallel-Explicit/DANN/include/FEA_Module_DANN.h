@@ -81,9 +81,9 @@ public:
 
     void init_assembly();
 
-    void read_training_data();
+    void read_training_data(size_t ibatch);
 
-    void read_testing_data();
+    void read_testing_data(size_t ibatch);
 
     int solve();
 

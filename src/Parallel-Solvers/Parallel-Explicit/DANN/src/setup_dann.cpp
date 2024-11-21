@@ -61,12 +61,6 @@ void FEA_Module_DANN::setup()
     bool shape_optimization_on    = simparam->shape_optimization_on;
 
     init_assembly();
-
-    //read in training and test data
-    read_training_data();
-    first_training_batch_read = false;
-    read_testing_data();
-    first_testing_batch_read = false;
     
 } // end of setup
 
@@ -344,7 +338,7 @@ void FEA_Module_DANN::init_assembly(){
 /* ----------------------------------------------------------------------
    Read in model training data
 ------------------------------------------------------------------------- */
-void FEA_Module_DANN::read_training_data()
+void FEA_Module_DANN::read_training_data(size_t ibatch)
 {
   char ch;
   std::string skip_line, read_line, substring;
@@ -474,6 +468,7 @@ void FEA_Module_DANN::read_training_data()
           read_index_start += buffer_size;
       }
   } // end of input data readin
+  
 
   //read output training data
   if (myrank == 0&&first_training_batch_read)
@@ -570,13 +565,19 @@ void FEA_Module_DANN::read_training_data()
       read_index_start += buffer_size;
   }
   // end of output data readin
+
+  //debug print of output
+  // if(myrank==0)
+  // for(int ibatch = 0; ibatch < batch_size; ibatch++){
+  //   std::cout << "Output for batch index " << ibatch << " is " << Output_Training_Data_Batch(0,ibatch) << std::endl;
+  // }
     
 } // end of read_training_data
 
 /* ----------------------------------------------------------------------
    Read in model testing data
 ------------------------------------------------------------------------- */
-void FEA_Module_DANN::read_testing_data()
+void FEA_Module_DANN::read_testing_data(size_t ibatch)
 {
 
     

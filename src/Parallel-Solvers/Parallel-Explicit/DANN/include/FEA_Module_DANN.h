@@ -81,15 +81,17 @@ public:
 
     void init_assembly();
 
-    void read_training_data(size_t ibatch);
+    void read_training_data(size_t batch_size, bool last_batch);
 
-    void read_testing_data(size_t ibatch);
+    void read_testing_data(size_t batch_size, bool last_batch);
 
     int solve();
 
     //void checkpoint_solve(std::set<Dynamic_Checkpoint>::iterator start_checkpoint, size_t bounding_timestep);
 
     void dann_solve();
+
+    void sigmoid_activation(Teuchos::RCP<MV> previous_node_states_distributed);
 
     void update_state_dann(double rk_alpha,
                              const size_t num_nodes,

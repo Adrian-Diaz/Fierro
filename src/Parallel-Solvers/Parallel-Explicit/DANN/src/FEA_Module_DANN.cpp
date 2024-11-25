@@ -252,10 +252,17 @@ void FEA_Module_DANN::dann_solve()
     size_t batch_size = module_params->batch_size;
     size_t num_training_data = module_params->num_training_data;
     size_t num_testing_data = module_params->num_testing_data;
-    size_t num_batches = num_training_data/batch_size;
     size_t num_input_nodes = module_params->num_input_nodes;
     size_t num_output_nodes = module_params->num_output_nodes;
-    if(num_training_data%batch_size!=0) num_batches++;
+    size_t num_batches = num_training_data/batch_size;
+    size_t trailing_batch_size = 0;
+    bool last_batch = false;
+    if(num_training_data%batch_size!=0){
+        num_batches++;
+        trailing_batch_size = num_training_data%batch_size;
+    }
+    first_training_batch_read = true;
+    size_t current_batch_size = batch_size;
 
     int print_cycle = dynamic_options.print_cycle;
 
@@ -271,23 +278,45 @@ void FEA_Module_DANN::dann_solve()
     }
 
     for(size_t ibatch = 0; ibatch < num_batches; ibatch++){
+        if (ibatch==num_batches-1){
+            last_batch = true;
+            if(trailing_batch_size){
+                current_batch_size = trailing_batch_size;
+            }
+        }
+        //reset state values
+        previous_node_states_distributed->putScalar(0);
         //read in training and test data in batches
-        read_training_data(ibatch);
-        first_training_batch_read = false;
+        read_training_data(current_batch_size, last_batch);
+        
+        //batch progress print
+        if(myrank==0){
+            //std::cout << "= ";
+        }
         //read_testing_data(ibatch);
         //first_testing_batch_read = false;
-        
-        //previous_node_states_distributed->putScalar(1);
+        //output last state vector to debug batch reads
+        // if(ibatch==num_batches-1){
+        //     previous_node_states_distributed->describe(*fos, Teuchos::VERB_EXTREME);
+        // }
         //comm to all here
         all_previous_node_states_distributed->doImport(*previous_node_states_distributed, *importer, Tpetra::INSERT);
         for(int istep = 0; istep < cycle_stop; istep++){
             distributed_weights->apply(*previous_node_states_distributed,*node_states_distributed);
+            sigmoid_activation(node_states_distributed);
             //comm to all here
             all_node_states_distributed->doImport(*node_states_distributed, *importer, Tpetra::INSERT);
             all_previous_node_states_distributed->assign(*all_node_states_distributed);
         }
+
     }
-    //output state vector
-    //node_states_distributed->describe(*fos, Teuchos::VERB_EXTREME);
     
 } // end of DANN solve
+
+//activates every element of the current pre-state vector using the sigmoid function
+void FEA_Module_DANN::sigmoid_activation(Teuchos::RCP<MV> previous_node_states_distributed){
+    vec_array node_states = node_states_distributed->getLocalView<HostSpace>(Tpetra::Access::ReadWrite);
+    FOR_ALL_CLASS(node_gid, 0, nlocal_nodes, {
+        node_states(node_gid,0) = 1/(1+exp(-node_states(node_gid,0)));
+    }); // end parallel for
+}

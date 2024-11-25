@@ -338,7 +338,7 @@ void FEA_Module_DANN::init_assembly(){
 /* ----------------------------------------------------------------------
    Read in model training data
 ------------------------------------------------------------------------- */
-void FEA_Module_DANN::read_training_data(size_t ibatch)
+void FEA_Module_DANN::read_training_data(size_t current_batch_size, bool last_batch)
 {
   char ch;
   std::string skip_line, read_line, substring;
@@ -351,7 +351,7 @@ void FEA_Module_DANN::read_training_data(size_t ibatch)
   std::string training_input_data_filename = module_params->training_input_data_filename;
   std::string training_output_data_filename = module_params->training_output_data_filename;
   size_t buffer_size = module_params->read_buffer_size;
-  size_t batch_size = module_params->batch_size;
+  size_t batch_size = current_batch_size;
   int local_node_index;
   size_t batch_id;
   int buffer_loop, buffer_iteration, buffer_iterations, scan_loop;
@@ -364,19 +364,23 @@ void FEA_Module_DANN::read_training_data(size_t ibatch)
 
   CArrayKokkos<char, array_layout, HostSpace, memory_traits> read_buffer;
 
-  // read the input training data
+  // open the input and output training data files
   if (myrank == 0&&first_training_batch_read)
   {
       std::cout << " INPUT DATA DIM IS " << num_input_nodes << std::endl;
       input_training_file = new std::ifstream();
       input_training_file->open(training_input_data_filename);
 
+      std::cout << " OUTPUT DATA DIM IS " << num_output_nodes << std::endl;
+      output_training_file = new std::ifstream();
+      output_training_file->open(training_output_data_filename);
+      first_training_batch_read = false;
   } // end if(myrank==0)
 
   // scope ensures view is destroyed for now to avoid calling a device view with an active host view later
   {
       host_vec_array node_states = previous_node_states_distributed->getLocalView<HostSpace>(Tpetra::Access::ReadWrite);
-      /*only task 0 reads in data from the input file
+      /*only process 0 reads in data from the input file
       stores data in a buffer and communicates once the buffer cap is reached
       or the data ends*/
 
@@ -468,18 +472,6 @@ void FEA_Module_DANN::read_training_data(size_t ibatch)
           read_index_start += buffer_size;
       }
   } // end of input data readin
-  
-
-  //read output training data
-  if (myrank == 0&&first_training_batch_read)
-  {
-      std::cout << " OUTPUT DATA DIM IS " << num_output_nodes << std::endl;
-      output_training_file = new std::ifstream();
-      output_training_file->open(training_output_data_filename);
-  } // end if(myrank==0)
-  /*only task 0 reads in data from the input file
-  stores data in a buffer and communicates once the buffer cap is reached
-  or the data ends*/
 
   // allocate read buffer
   read_buffer = CArrayKokkos<char, array_layout, HostSpace, memory_traits>(buffer_size, num_output_nodes, MAX_WORD);
@@ -571,13 +563,20 @@ void FEA_Module_DANN::read_training_data(size_t ibatch)
   // for(int ibatch = 0; ibatch < batch_size; ibatch++){
   //   std::cout << "Output for batch index " << ibatch << " is " << Output_Training_Data_Batch(0,ibatch) << std::endl;
   // }
+
+  //close files if the last batch has been read in
+  if (myrank == 0&&last_batch)
+  {
+      input_training_file->close();
+      output_training_file->close();
+  }
     
 } // end of read_training_data
 
 /* ----------------------------------------------------------------------
    Read in model testing data
 ------------------------------------------------------------------------- */
-void FEA_Module_DANN::read_testing_data(size_t ibatch)
+void FEA_Module_DANN::read_testing_data(size_t current_batch_size, bool last_batch)
 {
 
     

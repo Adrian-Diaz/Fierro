@@ -93,6 +93,8 @@ public:
 
     void sigmoid_activation(Teuchos::RCP<MV> previous_node_states_distributed);
 
+    void tanh_activation(Teuchos::RCP<MV> previous_node_states_distributed);
+
     void update_state_dann(double rk_alpha,
                              const size_t num_nodes,
                              DViewCArrayKokkos<double>& node_states);
@@ -159,6 +161,7 @@ public:
     //local node data
     size_t num_local_input_nodes;
     size_t num_local_output_nodes;
+    size_t batch_size;
 
     // Global node data
     Teuchos::RCP<MV> previous_node_states_distributed;

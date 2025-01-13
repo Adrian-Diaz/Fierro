@@ -106,7 +106,7 @@ FEA_Module_DANN::FEA_Module_DANN(
     // node_states_distributed     = Explicit_Solver_Pointer_->node_states_distributed;
     // all_node_states_distributed = Explicit_Solver_Pointer_->all_node_states_distributed;
     
-    size_t batch_size = module_params->batch_size;
+    batch_size = module_params->batch_size;
     size_t num_output_nodes = (module_params->sparse_categories) ? 1 : module_params->num_output_nodes;
     initial_node_states_distributed = Teuchos::rcp(new MV(map, batch_size));
     all_node_states_distributed = Teuchos::rcp(new MV(all_node_map, batch_size));
@@ -249,7 +249,6 @@ void FEA_Module_DANN::dann_solve()
     const size_t rk_level = dynamic_options.rk_num_bins - 1;
 
     const DCArrayKokkos<boundary_t> boundary = module_params->boundary;
-    size_t batch_size = module_params->batch_size;
     size_t num_training_data = module_params->num_training_data;
     size_t num_testing_data = module_params->num_testing_data;
     size_t num_input_nodes = module_params->num_input_nodes;
@@ -295,10 +294,6 @@ void FEA_Module_DANN::dann_solve()
         }
         //read_testing_data(ibatch);
         //first_testing_batch_read = false;
-        //output last state vector to debug batch reads
-        // if(ibatch==num_batches-1){
-        //     previous_node_states_distributed->describe(*fos, Teuchos::VERB_EXTREME);
-        // }
         //comm to all here
         all_previous_node_states_distributed->doImport(*previous_node_states_distributed, *importer, Tpetra::INSERT);
         for(int istep = 0; istep < cycle_stop; istep++){
@@ -308,6 +303,11 @@ void FEA_Module_DANN::dann_solve()
             all_node_states_distributed->doImport(*node_states_distributed, *importer, Tpetra::INSERT);
             all_previous_node_states_distributed->assign(*all_node_states_distributed);
         }
+        
+        //output last state vector to debug activation
+        // if(ibatch==num_batches-1){
+        //     previous_node_states_distributed->describe(*fos, Teuchos::VERB_EXTREME);
+        // }
 
     }
     
@@ -315,8 +315,21 @@ void FEA_Module_DANN::dann_solve()
 
 //activates every element of the current pre-state vector using the sigmoid function
 void FEA_Module_DANN::sigmoid_activation(Teuchos::RCP<MV> previous_node_states_distributed){
-    vec_array node_states = node_states_distributed->getLocalView<HostSpace>(Tpetra::Access::ReadWrite);
+    vec_array node_states = node_states_distributed->getLocalView<device_type>(Tpetra::Access::ReadWrite);
     FOR_ALL_CLASS(node_gid, 0, nlocal_nodes, {
-        node_states(node_gid,0) = 1/(1+exp(-node_states(node_gid,0)));
+        for(int ibatch=0; ibatch < batch_size; ibatch++){
+            node_states(node_gid,ibatch) = 1/(1+exp(-node_states(node_gid,ibatch)));
+        }
     }); // end parallel for
 }
+
+//activates every element of the current pre-state vector using the tanh function
+void FEA_Module_DANN::tanh_activation(Teuchos::RCP<MV> previous_node_states_distributed){
+    vec_array node_states = node_states_distributed->getLocalView<device_type>(Tpetra::Access::ReadWrite);
+    FOR_ALL_CLASS(node_gid, 0, nlocal_nodes, {
+        for(int ibatch=0; ibatch < batch_size; ibatch++){
+            node_states(node_gid,ibatch) = (exp(2*node_states(node_gid,ibatch))-1)/(exp(2*node_states(node_gid,ibatch))+1);
+        }
+    }); // end parallel for
+}
+

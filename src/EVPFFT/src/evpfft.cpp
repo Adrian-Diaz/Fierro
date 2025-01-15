@@ -145,10 +145,19 @@ void EVPFFT::set_some_voxels_arrays_to_zero()
 
 void EVPFFT::init_after_reading_input_data()
 {
+
     init_xk_gb();
     init_disgradmacro();
     init_ept();
     init_evm();
+
+#ifndef ABSOLUTE_NO_OUTPUT
+    if (iwfields == 1) {
+      int imicro = 0;
+      //write_micro_state_xdmf();
+      write_micro_state_pvtu();
+    }
+#endif
 
 // the variables initialized in the funcitons below are reduced into
 // and should be done once, hence the need for #if guard since the variables
@@ -415,7 +424,8 @@ void EVPFFT::evolve()
 #ifndef ABSOLUTE_NO_OUTPUT
       write_macro_state();
       if (iwfields == 1 and imicro % iwstep == 0) {
-        write_micro_state();
+        //write_micro_state_xdmf();
+        write_micro_state_pvtu();
       }
       if (iwtex == 1 and imicro == nsteps) {
         write_texture();

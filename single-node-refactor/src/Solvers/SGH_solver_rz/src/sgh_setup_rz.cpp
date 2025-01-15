@@ -344,7 +344,7 @@ void SGHRZ::setup(SimulationParameters_t& SimulationParamaters,
         size_t sum_local;
         size_t sum_total;
 
-        REDUCE_SUM(elem_gid, 0, num_elems, sum_local,{
+        FOR_REDUCE_SUM(elem_gid, 0, num_elems, sum_local,{
 
             if(elem_mat_id(elem_gid) == mat_id){
                 // increment the number of elements the materials live in
@@ -493,7 +493,9 @@ void SGHRZ::setup(SimulationParameters_t& SimulationParamaters,
                             State.MaterialPoints(mat_id).stress,
                             State.MaterialPoints(mat_id).sspd,
                             State.MaterialPoints(mat_id).sie,
-                            State.MaterialPoints(mat_id).statev,
+                            State.MaterialPoints(mat_id).eos_state_vars,
+                            State.MaterialPoints(mat_id).strength_state_vars,
+                            State.MaterialPoints(mat_id).shear_modulii,
                             rk_num_bins,
                             num_mat_points,
                             mat_id);

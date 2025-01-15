@@ -148,6 +148,7 @@ void SGTM3D::execute(SimulationParameters_t& SimulationParamaters,
         mesh, 
         State,
         SimulationParamaters, 
+        dt,
         time_value, 
         graphics_times,
         SGTM3D_State::required_node_state,
@@ -252,7 +253,6 @@ void SGTM3D::execute(SimulationParameters_t& SimulationParamaters,
                 //           State.MaterialPoints(mat_id).pres,
                 //           State.MaterialPoints(mat_id).stress,
                 //           State.MaterialPoints(mat_id).sspd,
-                //           State.MaterialPoints(mat_id).statev,
                 //           State.MaterialCorners(mat_id).force,
                 //           State.MaterialPoints(mat_id).volfrac,
                 //           State.corners_in_mat_elem,
@@ -291,7 +291,8 @@ void SGTM3D::execute(SimulationParameters_t& SimulationParamaters,
             //                  State.MaterialPoints(mat_id).sie,
             //                  State.GaussPoints.vol,
             //                  State.MaterialPoints(mat_id).mass,
-            //                  State.MaterialPoints(mat_id).statev,
+            //                  State.MaterialPoints(mat_id).eos_state_vars,
+            //                  State.MaterialPoints(mat_id).strength_state_vars,
             //                  State.MaterialPoints(mat_id).eroded,
             //                  State.MaterialToMeshMaps(mat_id).elem,
             //                  dt,
@@ -325,6 +326,7 @@ void SGTM3D::execute(SimulationParameters_t& SimulationParamaters,
             mesh_writer.write_mesh(mesh,
                                    State,
                                    SimulationParamaters,
+                                   dt,
                                    time_value,
                                    graphics_times,
                                    SGTM3D_State::required_node_state,
@@ -407,7 +409,7 @@ double SGTM3D::sum_domain_internal_energy(const DCArrayKokkos<double>& MaterialP
     double IE_loc_sum;
 
     // loop over the material points and tally IE
-    REDUCE_SUM(matpt_lid, 0, num_mat_points, IE_loc_sum, {
+    FOR_REDUCE_SUM(matpt_lid, 0, num_mat_points, IE_loc_sum, {
         IE_loc_sum += MaterialPoints_mass(matpt_lid) * MaterialPoints_sie(1, matpt_lid);
     }, IE_sum);
     Kokkos::fence();
@@ -440,7 +442,7 @@ double SGTM3D::sum_domain_kinetic_energy(const Mesh_t& mesh,
     double KE_sum = 0.0;
     double KE_loc_sum;
 
-    REDUCE_SUM(node_gid, 0, mesh.num_nodes, KE_loc_sum, {
+    FOR_REDUCE_SUM(node_gid, 0, mesh.num_nodes, KE_loc_sum, {
         double ke = 0;
 
         for (size_t dim = 0; dim < mesh.num_dims; dim++) {
@@ -462,7 +464,7 @@ double SGTM3D::sum_domain_material_mass(const DCArrayKokkos<double>& MaterialPoi
     double mass_domain = 0.0;
     double mass_loc_domain;
 
-    REDUCE_SUM(matpt_lid, 0, num_mat_points, mass_loc_domain, {
+    FOR_REDUCE_SUM(matpt_lid, 0, num_mat_points, mass_loc_domain, {
         mass_loc_domain += MaterialPoints_mass(matpt_lid);
     }, mass_domain);
     Kokkos::fence();
@@ -493,7 +495,7 @@ double SGTM3D::sum_domain_node_mass(const Mesh_t& mesh,
     double mass_domain = 0.0;
     double mass_loc_domain;
 
-    REDUCE_SUM(node_gid, 0, mesh.num_nodes, mass_loc_domain, {
+    FOR_REDUCE_SUM(node_gid, 0, mesh.num_nodes, mass_loc_domain, {
         if (mesh.num_dims == 2) {
             mass_loc_domain += node_mass(node_gid) * node_coords(1, node_gid, 1);
         }

@@ -435,8 +435,12 @@ size_t fill_geometric_region(const Mesh_t& mesh,
             }
         case region::cylinder:
             {
-                if (radius_cyl >= region_fills(f_id).radius1
-                    && radius_cyl <= region_fills(f_id).radius2) {
+                double z_lower_bound = region_fills(f_id).z1;
+                double z_upper_bound = region_fills(f_id).z2;
+
+                if (radius_cyl >= region_fills(f_id).radius1 && 
+                    radius_cyl <= region_fills(f_id).radius2 &&
+                    mesh_coords(2) >= z_lower_bound && mesh_coords(2) <= z_upper_bound) {
                     fill_this = 1;
                 }
                 break;
@@ -862,6 +866,61 @@ void paint_node_temp(const CArrayKokkos<RegionFill_t>& region_fills,
 
 
 
+/////////////////////////////////////////////////////////////////////////////
+///
+/// \fn init_state_vars
+///
+/// \brief a function to initialize eos and stress state vars
+///
+/// \param Materials holds the material models and global parameters
+/// \param mesh is the simulation mesh
+/// \param DualArrays for the material point eos state vars
+/// \param DualArrays for the material point strength state vars
+/// \param rk_num_bins is number of time integration storage bins
+/// \param num_mat_pts is the number of material points for mat_id
+/// \param mat_id is material id
+///
+/////////////////////////////////////////////////////////////////////////////
+void init_state_vars(const Material_t& Materials,
+                     const Mesh_t& mesh,
+                     const DCArrayKokkos<double>& MaterialPoints_eos_state_vars,
+                     const DCArrayKokkos<double>& MaterialPoints_strength_state_vars,
+                     const DCArrayKokkos<size_t>& MaterialToMeshMaps_elem,
+                     const size_t rk_num_bins,
+                     const size_t num_mat_pts,
+                     const size_t mat_id)
+{
+
+    // -------
+    // the call to the model initialization
+    // -------
+    if (Materials.MaterialEnums.host(mat_id).StrengthType == model::incrementBased ||
+        Materials.MaterialEnums.host(mat_id).StrengthType == model::stateBased) {
+
+            if (Materials.MaterialEnums.host(mat_id).StrengthSetupLocation == model::host){
+
+                Materials.MaterialFunctions.host(mat_id).init_strength_state_vars(
+                                MaterialPoints_eos_state_vars,
+                                MaterialPoints_strength_state_vars,
+                                Materials.eos_global_vars,
+                                Materials.strength_global_vars,
+                                MaterialToMeshMaps_elem,
+                                num_mat_pts,
+                                mat_id);
+
+            } // end if
+            else {
+                // --- running setup function on the device
+
+                printf("Calling initial condition function on GPU is NOT yet supported \n");
+
+            }
+
+    } // end if
+
+} // end of set values in eos and strength state vars
+
+
 
 /////////////////////////////////////////////////////////////////////////////
 ///
@@ -871,12 +930,13 @@ void paint_node_temp(const CArrayKokkos<RegionFill_t>& region_fills,
 ///
 /// \param Materials holds the material models and global parameters
 /// \param mesh is the simulation mesh
-/// \param GaussPoint_den is density at the GaussPoints on the mesh
-/// \param GaussPoint_pres is pressure at the GaussPoints on the mesh
-/// \param GaussPoint_stress is stress at the GaussPoints on the mesh
-/// \param GaussPoint_sspd is sound speed at the GaussPoints on the mesh
-/// \param GaussPoint_sie is specific internal energy at the GaussPoints on the mesh
-/// \param GaussPoint_statev are the state variables at the GaussPoints on the mesh
+/// \param DualArrays for density at the material points on the mesh
+/// \param DualArrays for pressure at the material points on the mesh
+/// \param DualArrays for stress at the material points on the mesh
+/// \param DualArrays for sound speed at the material points on the mesh
+/// \param DualArrays for specific internal energy at the material points on the mesh
+/// \param DualArrays for the material point eos state vars
+/// \param DualArrays for the material point strength state vars
 /// \param num_mat_pts is the number of material points for mat_id
 /// \param mat_id is material id
 /// \param rk_num_bins is number of time integration storage bins
@@ -889,16 +949,46 @@ void init_press_sspd_stress(const Material_t& Materials,
                             const DCArrayKokkos<double>& MaterialPoints_stress,
                             const DCArrayKokkos<double>& MaterialPoints_sspd,
                             const DCArrayKokkos<double>& MaterialPoints_sie,
-                            const DCArrayKokkos<double>& MaterialPoints_statev,
+                            const DCArrayKokkos<double>& MaterialPoints_eos_state_vars,
+                            const DCArrayKokkos<double>& MaterialPoints_strength_state_vars,
+                            const DCArrayKokkos<double>& MaterialPoints_shear_modulii,
                             const size_t rk_num_bins,
                             const size_t num_mat_pts,
                             const size_t mat_id)
 {
 
+    // --- Shear modulus ---
+    // loop over the material points
+    FOR_ALL(mat_point_lid, 0, num_mat_pts, {
 
-    // -------
-    // the call to the model initialization goes here
-    // -------
+        // setting shear modulii to zero, corresponds to a gas
+        for(size_t i; i<3; i++){
+            MaterialPoints_shear_modulii(mat_point_lid,i) = 0.0;
+        } // end for
+
+    });
+
+
+    // --- stress tensor ---
+    for(size_t rk_level=0; rk_level<rk_num_bins; rk_level++){                
+
+        FOR_ALL(mat_point_lid, 0, num_mat_pts, {
+
+            // always 3D even for 2D-RZ
+            for (size_t i = 0; i < 3; i++) {
+                for (size_t j = 0; j < 3; j++) {
+
+                    // ===============
+                    //  Call the strength model here
+                    // ===============
+                    MaterialPoints_stress(rk_level, mat_point_lid, i, j) = 0.0;
+                }
+            }  // end for i,j
+                             
+        }); // end parallel for over matpt storage
+
+    }// end for rk_level
+
 
     // --- pressure and sound speed ---
     // loop over the material points
@@ -910,7 +1000,7 @@ void init_press_sspd_stress(const Material_t& Materials,
                                         MaterialPoints_stress,
                                         mat_point_lid,
                                         mat_id,
-                                        MaterialPoints_statev,
+                                        MaterialPoints_eos_state_vars,
                                         MaterialPoints_sspd,
                                         MaterialPoints_den(mat_point_lid),
                                         MaterialPoints_sie(0, mat_point_lid),
@@ -922,29 +1012,16 @@ void init_press_sspd_stress(const Material_t& Materials,
                                         MaterialPoints_stress,
                                         mat_point_lid,
                                         mat_id,
-                                        MaterialPoints_statev,
+                                        MaterialPoints_eos_state_vars,
                                         MaterialPoints_sspd,
                                         MaterialPoints_den(mat_point_lid),
                                         MaterialPoints_sie(0, mat_point_lid),
+                                        MaterialPoints_shear_modulii,
                                         Materials.eos_global_vars);
     }); // end pressure and sound speed
 
 
-    // --- stress tensor ---
-    for(size_t rk_level=0; rk_level<rk_num_bins; rk_level++){                
 
-        FOR_ALL(mat_point_lid, 0, num_mat_pts, {
-
-            // always 3D even for 2D-RZ
-            for (size_t i = 0; i < 3; i++) {
-                for (size_t j = 0; j < 3; j++) {
-                    MaterialPoints_stress(rk_level, mat_point_lid, i, j) = 0.0;
-                }
-            }  // end for i,j
-                             
-        }); // end parallel for over matpt storage
-
-    }// end for rk_level
 
 } // end function
 

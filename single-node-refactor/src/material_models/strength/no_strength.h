@@ -42,26 +42,85 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // ------------------------------------------------------------------------------
 namespace NoStrengthModel {
 
+    static void init_strength_state_vars(
+        const DCArrayKokkos <double> &MaterialPoints_eos_state_vars,
+        const DCArrayKokkos <double> &MaterialPoints_strength_state_vars,
+        const RaggedRightArrayKokkos <double> &eos_global_vars,
+        const RaggedRightArrayKokkos <double> &strength_global_vars,
+        const DCArrayKokkos<size_t>& MaterialToMeshMaps_elem,
+        const size_t num_material_points,
+        const size_t mat_id)
+    {
+
+        // walk over all elements that have this material
+        FOR_ALL(mat_points_lid, 0, num_material_points, {
+            
+            // get elem gid
+            size_t elem_gid = MaterialToMeshMaps_elem(mat_points_lid); // might be used with some models
+
+            // first index is matpt, second index is the number of vars
+            size_t num_strength_state_vars = MaterialPoints_strength_state_vars.dims(1); 
+            
+            for(size_t var=0; var<num_strength_state_vars; var++){
+                MaterialPoints_strength_state_vars(mat_points_lid,var) = 0.0;
+            } // end for
+
+        });  // end parallel for
+
+    }  // end of init_strength_state_vars
+
+
     KOKKOS_FUNCTION
-    static void calc_stress(const DCArrayKokkos<double>& elem_pres,
-        const DCArrayKokkos<double>& elem_stress,
-        const size_t mat_pt_lid,
-        const size_t mat_id,
-        const DCArrayKokkos<double>& elem_state_vars,
-        const DCArrayKokkos<double>& elem_sspd,
-        const double den,
-        const double sie,
-        const ViewCArrayKokkos<double>& vel_grad,
-        const ViewCArrayKokkos<size_t>& elem_node_gids,
-        const DCArrayKokkos<double>&    node_coords,
-        const DCArrayKokkos<double>&    node_vel,
+    static void calc_stress(
+        const DCArrayKokkos<double>  &vel_grad,
+        const DCArrayKokkos <double> &node_coords,
+        const DCArrayKokkos <double> &node_vel,
+        const DCArrayKokkos<size_t>  &nodes_in_elem,
+        const DCArrayKokkos<double>  &MaterialPoints_pres,
+        const DCArrayKokkos<double>  &MaterialPoints_stress,
+        const DCArrayKokkos<double>  &MaterialPoints_sspd,
+        const DCArrayKokkos <double> &MaterialPoints_eos_state_vars,
+        const DCArrayKokkos <double> &MaterialPoints_strength_state_vars,
+        const double MaterialPoints_den,
+        const double MaterialPoints_sie,
+        const DCArrayKokkos<double>& MaterialPoints_shear_modulii,
+        const DCArrayKokkos<size_t>& MaterialToMeshMaps_elem,
+        const RaggedRightArrayKokkos <double> &eos_global_vars,
+        const RaggedRightArrayKokkos <double> &strength_global_vars,
         const double vol,
         const double dt,
         const double rk_alpha,
-        const RaggedRightArrayKokkos<double> &strength_global_vars)
+        const double time,
+        const size_t cycle,
+        const size_t MaterialPoints_lid,
+        const size_t mat_id,
+        const size_t gauss_gid,
+        const size_t elem_gid)
     {
+
+        // -----------------------------------------------------------------------------
+        // Required variables are here
+        // ------------------------------------------------------------------------------
+
+        // -----------------------------------------------------------------------------
+        // The user must coding goes here
+        // ------------------------------------------------------------------------------
+
         return;
     } // end of user mat
+
+    
+    static void destroy(
+        const DCArrayKokkos <double> &MaterialPoints_eos_state_vars,
+        const DCArrayKokkos <double> &MaterialPoints_strength_state_vars,
+        const RaggedRightArrayKokkos <double> &eos_global_vars,
+        const RaggedRightArrayKokkos <double> &strength_global_vars,
+        const DCArrayKokkos<size_t>& MaterialToMeshMaps_elem,
+        const size_t num_material_points,
+        const size_t mat_ids)
+    {
+
+    } // end destory
 
 } // end namespace
 

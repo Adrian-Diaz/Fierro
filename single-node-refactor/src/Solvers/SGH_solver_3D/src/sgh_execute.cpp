@@ -147,7 +147,8 @@ void SGH3D::execute(SimulationParameters_t& SimulationParamaters,
     mesh_writer.write_mesh(
         mesh, 
         State, 
-        SimulationParamaters, 
+        SimulationParamaters,
+        dt, 
         time_value, 
         graphics_times,
         SGH3D_State::required_node_state,
@@ -228,14 +229,13 @@ void SGH3D::execute(SimulationParameters_t& SimulationParamaters,
             // ---- RK coefficient ----
             double rk_alpha = 1.0 / ((double)rk_num_stages - (double)rk_stage);
 
-            // ---- Calculate velocity divergence for the element ----
+            // ---- Calculate velocity gradient for the element ----
 
-            get_divergence(State.GaussPoints.div,
-                           mesh,
-                           State.node.coords,
-                           State.node.vel,
-                           State.GaussPoints.vol);
-
+            get_velgrad(State.GaussPoints.vel_grad,
+                        mesh,
+                        State.node.coords,
+                        State.node.vel,
+                        State.GaussPoints.vol);
 
             set_corner_force_zero(mesh, State.corner.force);
 
@@ -248,7 +248,7 @@ void SGH3D::execute(SimulationParameters_t& SimulationParamaters,
                 get_force(Materials,
                           mesh,
                           State.GaussPoints.vol,
-                          State.GaussPoints.div,
+                          State.GaussPoints.vel_grad,
                           State.MaterialPoints(mat_id).eroded,
                           State.corner.force,
                           State.node.coords,
@@ -258,7 +258,6 @@ void SGH3D::execute(SimulationParameters_t& SimulationParamaters,
                           State.MaterialPoints(mat_id).pres,
                           State.MaterialPoints(mat_id).stress,
                           State.MaterialPoints(mat_id).sspd,
-                          State.MaterialPoints(mat_id).statev,
                           State.MaterialCorners(mat_id).force,
                           State.MaterialPoints(mat_id).volfrac,
                           State.corners_in_mat_elem,
@@ -270,7 +269,34 @@ void SGH3D::execute(SimulationParameters_t& SimulationParamaters,
                           dt,
                           rk_alpha);
 
+                if (Materials.MaterialEnums.host(mat_id).StrengthType == model::incrementBased) {
+                    update_stress(Materials,
+                                  mesh,
+                                  State.GaussPoints.vol,
+                                  State.node.coords,
+                                  State.node.vel,
+                                  State.GaussPoints.vel_grad,
+                                  State.MaterialPoints(mat_id).den,
+                                  State.MaterialPoints(mat_id).sie,
+                                  State.MaterialPoints(mat_id).pres,
+                                  State.MaterialPoints(mat_id).stress,
+                                  State.MaterialPoints(mat_id).sspd,
+                                  State.MaterialPoints(mat_id).eos_state_vars,
+                                  State.MaterialPoints(mat_id).strength_state_vars,
+                                  State.MaterialPoints(mat_id).shear_modulii,
+                                  State.MaterialToMeshMaps(mat_id).elem,
+                                  num_mat_elems,
+                                  mat_id,
+                                  fuzz,
+                                  small,
+                                  time_value,
+                                  dt,
+                                  rk_alpha,
+                                  cycle);
+                } // end if on increment
+
             } // end for mat_id
+
 
             // ---- Update nodal velocities ---- //
             update_velocity(rk_alpha,
@@ -323,6 +349,7 @@ void SGH3D::execute(SimulationParameters_t& SimulationParamaters,
                              mesh,
                              State.node.coords,
                              State.node.vel,
+                             State.GaussPoints.vel_grad,
                              State.MaterialPoints(mat_id).den,
                              State.MaterialPoints(mat_id).pres,
                              State.MaterialPoints(mat_id).stress,
@@ -330,11 +357,15 @@ void SGH3D::execute(SimulationParameters_t& SimulationParamaters,
                              State.MaterialPoints(mat_id).sie,
                              State.GaussPoints.vol,
                              State.MaterialPoints(mat_id).mass,
-                             State.MaterialPoints(mat_id).statev,
+                             State.MaterialPoints(mat_id).eos_state_vars,
+                             State.MaterialPoints(mat_id).strength_state_vars,
                              State.MaterialPoints(mat_id).eroded,
+                             State.MaterialPoints(mat_id).shear_modulii,
                              State.MaterialToMeshMaps(mat_id).elem,
+                             time_value,
                              dt,
                              rk_alpha,
+                             cycle,
                              num_mat_elems,
                              mat_id);
             } // end for mat_id
@@ -370,6 +401,7 @@ void SGH3D::execute(SimulationParameters_t& SimulationParamaters,
             mesh_writer.write_mesh(mesh,
                                    State,
                                    SimulationParamaters,
+                                   dt,
                                    time_value,
                                    graphics_times,
                                    SGH3D_State::required_node_state,
@@ -529,7 +561,7 @@ double sum_domain_internal_energy(const DCArrayKokkos<double>& MaterialPoints_ma
     double IE_loc_sum;
 
     // loop over the material points and tally IE
-    REDUCE_SUM(matpt_lid, 0, num_mat_points, IE_loc_sum, {
+    FOR_REDUCE_SUM(matpt_lid, 0, num_mat_points, IE_loc_sum, {
         IE_loc_sum += MaterialPoints_mass(matpt_lid) * MaterialPoints_sie(1, matpt_lid);
     }, IE_sum);
     Kokkos::fence();
@@ -562,7 +594,7 @@ double sum_domain_kinetic_energy(const Mesh_t& mesh,
     double KE_sum = 0.0;
     double KE_loc_sum;
 
-    REDUCE_SUM(node_gid, 0, mesh.num_nodes, KE_loc_sum, {
+    FOR_REDUCE_SUM(node_gid, 0, mesh.num_nodes, KE_loc_sum, {
         double ke = 0;
 
         for (size_t dim = 0; dim < mesh.num_dims; dim++) {
@@ -584,7 +616,7 @@ double sum_domain_material_mass(const DCArrayKokkos<double>& MaterialPoints_mass
     double mass_domain = 0.0;
     double mass_loc_domain;
 
-    REDUCE_SUM(matpt_lid, 0, num_mat_points, mass_loc_domain, {
+    FOR_REDUCE_SUM(matpt_lid, 0, num_mat_points, mass_loc_domain, {
         mass_loc_domain += MaterialPoints_mass(matpt_lid);
     }, mass_domain);
     Kokkos::fence();
@@ -615,7 +647,7 @@ double sum_domain_node_mass(const Mesh_t& mesh,
     double mass_domain = 0.0;
     double mass_loc_domain;
 
-    REDUCE_SUM(node_gid, 0, mesh.num_nodes, mass_loc_domain, {
+    FOR_REDUCE_SUM(node_gid, 0, mesh.num_nodes, mass_loc_domain, {
         if (mesh.num_dims == 2) {
             mass_loc_domain += node_mass(node_gid) * node_coords(1, node_gid, 1);
         }

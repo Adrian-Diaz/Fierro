@@ -54,6 +54,7 @@ struct Simulation_Parameters
     //Topology Optimization flags
     bool topology_optimization_on = false;
     bool shape_optimization_on    = false;
+    bool dann_training_on         = false;
     
     DCArrayKokkos<mat_fill_t> mat_fill;
     DCArrayKokkos<material_t> material;
@@ -155,6 +156,15 @@ struct Simulation_Parameters
                 throw Yaml::ConfigurationException("Unsupported optimization objective " + to_string(optimization_options.optimization_objective));
             }
         }
+        else if(dann_training_on){
+            switch (optimization_options.optimization_objective) {
+            case OPTIMIZATION_OBJECTIVE::least_squares:
+                add_optimization_module(OPTIMIZATION_MODULE_TYPE::LeastSquares, FUNCTION_TYPE::OBJECTIVE, {});
+                break;
+            default:
+                throw Yaml::ConfigurationException("Unsupported optimization objective " + to_string(optimization_options.optimization_objective));
+            }
+        }
     }
     void derive_multi_objectives() {
         if (optimization_options.optimization_objective != OPTIMIZATION_OBJECTIVE::multi_objective)
@@ -248,6 +258,7 @@ struct Simulation_Parameters
     void derive_optimization_process() {
         topology_optimization_on = optimization_options.optimization_process == OPTIMIZATION_PROCESS::topology_optimization;
         shape_optimization_on    = optimization_options.optimization_process == OPTIMIZATION_PROCESS::shape_optimization;
+        dann_training_on         = optimization_options.optimization_process == OPTIMIZATION_PROCESS::dann_training;
     }
 
     void map_Opt_to_FEA() {

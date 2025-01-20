@@ -16,6 +16,7 @@ SERIALIZABLE_ENUM(OPTIMIZATION_MODULE_TYPE,
   Kinetic_Energy_Minimize_TopOpt,
   Internal_Energy_Minimize_TopOpt,
   Internal_Energy_Minimize_ShapeOpt,
+  LeastSquares,
   Multi_Objective,
   Heat_Capacity_Potential_Minimize_TopOpt,
   Strain_Energy_Minimize_TopOpt,
@@ -32,12 +33,12 @@ SERIALIZABLE_ENUM(OPTIMIZATION_MODULE_TYPE,
 )
 
 
-SERIALIZABLE_ENUM(OPTIMIZATION_PROCESS, none, topology_optimization, shape_optimization)
+SERIALIZABLE_ENUM(OPTIMIZATION_PROCESS, none, topology_optimization, shape_optimization, dann_training)
 SERIALIZABLE_ENUM(ROL_SUBPROBLEM_ALGORITHM, trust_region, line_search)
 SERIALIZABLE_ENUM(OPTIMIZATION_OBJECTIVE, none, minimize_kinetic_energy, multi_objective,
                   minimize_compliance, minimize_thermal_resistance, maximize_compliance,
                   maximize_kinetic_energy, maximize_thermal_resistance, minimize_internal_energy,
-                  maximize_internal_energy)
+                  maximize_internal_energy, least_squares)
 SERIALIZABLE_ENUM(CONSTRAINT_TYPE, mass, moment_of_inertia, center_of_mass, displacement)
 SERIALIZABLE_ENUM(RELATION, equality)
 SERIALIZABLE_ENUM(DENSITY_FILTER, none, helmholtz_filter)

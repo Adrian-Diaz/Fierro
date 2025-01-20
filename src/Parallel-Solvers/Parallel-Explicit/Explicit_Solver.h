@@ -92,6 +92,8 @@ public:
 
     void setup_shape_optimization_problem();
 
+    void setup_dann_training();
+
     // initialize data for boundaries of the model and storage for boundary conditions and applied loads
     void init_boundaries();
 

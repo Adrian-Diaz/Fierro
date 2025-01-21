@@ -200,9 +200,15 @@ public:
     RaggedRightArrayKokkos<real_t, array_layout, device_type, memory_traits> Original_Gradient_Entries;
     RaggedRightArrayKokkos<LO, array_layout, device_type, memory_traits>     Original_Gradient_Entry_Indices;
     DCArrayKokkos<size_t, array_layout, device_type, memory_traits>          Original_Gradient_Entries_Strides;
+    Kokkos::DualView<GO*, Kokkos::LayoutLeft, device_type, memory_traits> weight_indices;
+
+    //Global Matrix data
+    long long int global_nnz;
+    Teuchos::RCP<Tpetra::Map<LO, GO, node_type>> weight_map; // map of node indices
 
     // distributed matrices
     Teuchos::RCP<MAT> distributed_weights;
+    Teuchos::RCP<MV> distributed_weights1D;
     Teuchos::RCP<MAT> distributed_gradient_matrix;
 
     std::vector<real_t> time_data;

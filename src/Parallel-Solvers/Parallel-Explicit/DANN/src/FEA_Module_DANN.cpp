@@ -271,7 +271,6 @@ void FEA_Module_DANN::dann_solve()
     graphics_times = simparam->output_options.graphics_times;
     graphics_id    = simparam->output_options.graphics_id;
     
-    distributed_weights->setAllToScalar(1);
     if(myrank==0){
         std::cout << "DANN SOLVER CALLED " << std::endl;
     }

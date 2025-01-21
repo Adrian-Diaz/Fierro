@@ -305,6 +305,15 @@ void FEA_Module_DANN::init_assembly(){
   Tpetra::Details::makeColMap<LO,GO,node_type>(colmap,dommap,Graph_Matrix.get_kokkos_view(), nullptr);
 
   size_t nnz = Graph_Matrix.size();
+  weight_indices = Kokkos::DualView<GO*, Kokkos::LayoutLeft, device_type, memory_traits>("weight_indices", nnz);
+  //set global indices for each weight in 1D span by looping over contents of each row of matrix
+
+  global_nnz = 0;
+  //global nonzero count
+  MPI_Allreduce(&nnz, &global_nnz, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
+
+  //partition map of weight indices
+  weight_map = Teuchos::rcp(new Tpetra::Map<LO, GO, node_type>(global_nnz, nnz, 0, comm));
 
   //debug print
   //std::cout << "DOF GRAPH SIZE ON RANK " << myrank << " IS " << nnz << std::endl;

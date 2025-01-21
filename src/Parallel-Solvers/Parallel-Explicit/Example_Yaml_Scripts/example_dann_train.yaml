@@ -67,6 +67,8 @@ regions:
 optimization_options:
     optimization_process: dann_training
     optimization_objective: least_squares
+    max_weight_value: 1.0
+    min_weight_value: -1.0
     use_solve_checkpoints: true
     num_solve_checkpoints : 10
     disable_forward_solve_output: true

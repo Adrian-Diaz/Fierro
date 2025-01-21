@@ -319,9 +319,12 @@ void Explicit_Solver::run() {
   else if(simparam.shape_optimization_on){
     setup_shape_optimization_problem();
   }
+  else if(simparam.dann_training_on){
+    setup_dann_training();
+  }
   else{
     // ---------------------------------------------------------------------
-    //  Calculate the SGH solution
+    //  Calculate the solution for each module
     // ---------------------------------------------------------------------  
       for(int imodule = 0; imodule < nfea_modules; imodule++){
         if(myrank == 0) //TODO; implement solve bool so modules like the inertial module dont print this
@@ -1865,30 +1868,41 @@ void Explicit_Solver::setup_dann_training(){
   ROL::Ptr<ROL::Vector<real_t> > lower_bounds, mma_lower_bounds;
   ROL::Ptr<ROL::Vector<real_t> > upper_bounds, mma_upper_bounds;
 
-  //set bounds on design variables
-  //allocate global vector information
-  upper_bound_node_coordinates_distributed = Teuchos::rcp(new MV(map, num_dim));
-  //all_lower_bound_node_coordinates_distributed = Teuchos::rcp(new MV(all_node_map, 1));
-  //lower_bound_node_coordinates_distributed = Teuchos::rcp(new MV(*all_lower_bound_node_coordinates_distributed, map));
-  lower_bound_node_coordinates_distributed = Teuchos::rcp(new MV(map, num_dim));
-  host_vec_array node_coordinates_upper_bound = upper_bound_node_coordinates_distributed->getLocalView<HostSpace> (Tpetra::Access::ReadWrite);
-  host_vec_array node_coordinates_lower_bound = lower_bound_node_coordinates_distributed->getLocalView<HostSpace> (Tpetra::Access::ReadWrite);
+  //set bounds on weight matrix entries
 
-  //begin by assigning values of coordinate vectors to bound vectors
-  lower_bound_node_coordinates_distributed->assign(*all_node_coords_distributed);
-  upper_bound_node_coordinates_distributed->assign(*all_node_coords_distributed);
-
-  //initialize densities to 1 for now; in the future there might be an option to read in an initial condition for each node
-  for(int inode = 0; inode < nlocal_nodes; inode++){
-    for(int idim = 0; idim < num_dim; idim++){
-      node_coordinates_upper_bound(inode,idim) += simparam.optimization_options.max_coord_move_length;
-      node_coordinates_lower_bound(inode,idim) -= simparam.optimization_options.max_coord_move_length;
+  //get number of nonzero entries in weight matrix; currently requires interface with module
+  size_t global_nnz;
+  FEA_MODULE_TYPE set_module_type;
+  FEA_Module_DANN*  FEM_DANN_;
+  for (const auto& fea_module : fea_modules) {
+    if (fea_module->Module_Type == FEA_MODULE_TYPE::DANN) {
+        FEM_DANN_ = dynamic_cast<FEA_Module_DANN*>(fea_module);
+        set_module_type = FEA_MODULE_TYPE::DANN;
     }
   }
 
+  //initialize weight matrix
+  FEM_DANN_->distributed_weights->setAllToScalar(simparam.optimization_options.max_weight_value);
+
+  global_nnz = FEM_DANN_->global_nnz;
+  Teuchos::RCP<Tpetra::Map<LO, GO, node_type>> weight_map = FEM_DANN_->weight_map;
+  
+  //allocate global vector information
+  Teuchos::RCP<MV> upper_bound_weights_distributed = Teuchos::rcp(new MV(weight_map, 1));
+  Teuchos::RCP<MV> lower_bound_weights_distributed = Teuchos::rcp(new MV(weight_map, 1));
+  host_vec_array weights_upper_bound = upper_bound_weights_distributed->getLocalView<HostSpace> (Tpetra::Access::ReadWrite);
+  host_vec_array weights_lower_bound = lower_bound_weights_distributed->getLocalView<HostSpace> (Tpetra::Access::ReadWrite);
+
+  //initialize densities to 1 for now; in the future there might be an option to read in an initial condition for each node
+  size_t local_nnz;
+  for(int iweight = 0; iweight < local_nnz; iweight++){
+    weights_upper_bound(iweight,0) = simparam.optimization_options.max_weight_value;
+    weights_lower_bound(iweight,0) = simparam.optimization_options.min_weight_value;
+  }
+
   if(simparam.optimization_options.method_of_moving_asymptotes){
-    Teuchos::RCP<MV> mma_upper_bound_distributed = Teuchos::rcp(new MV(map, num_dim));
-    Teuchos::RCP<MV> mma_lower_bound_distributed = Teuchos::rcp(new MV(map, num_dim));
+    Teuchos::RCP<MV> mma_upper_bound_distributed = Teuchos::rcp(new MV(weight_map, 1));
+    Teuchos::RCP<MV> mma_lower_bound_distributed = Teuchos::rcp(new MV(weight_map, 1));
     
     mma_lower_bound_distributed->putScalar(-0.1);
     mma_upper_bound_distributed->putScalar(0.1);
@@ -1901,7 +1915,7 @@ void Explicit_Solver::setup_dann_training(){
 
   //Design variables to optimize
   ROL::Ptr<ROL::Vector<real_t>> x;
-  x = ROL::makePtr<ROL::TpetraMultiVector<real_t,LO,GO>>(design_node_coords_distributed);
+  x = ROL::makePtr<ROL::TpetraMultiVector<real_t,LO,GO>>(FEM_DANN_->distributed_weights1D);
   
   //Instantiate (the one) objective function for the problem
   ROL::Ptr<ROL::Objective<real_t>> obj, sub_obj;

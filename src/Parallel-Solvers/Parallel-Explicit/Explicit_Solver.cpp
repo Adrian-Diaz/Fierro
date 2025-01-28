@@ -1885,9 +1885,6 @@ void Explicit_Solver::setup_dann_training(){
     }
   }
 
-  //initialize weight matrix
-  FEM_DANN_->distributed_weights->setAllToScalar(simparam.optimization_options.max_weight_value);
-
   global_nnz = FEM_DANN_->global_nnz;
   Teuchos::RCP<Tpetra::Map<LO, GO, node_type>> weight_map = FEM_DANN_->weight_map;
   

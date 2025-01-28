@@ -341,6 +341,16 @@ void FEA_Module_DANN::init_assembly(){
 
   distributed_weights = Teuchos::rcp(new MAT(map, colmap, row_offsets_pass, weight_local_indices.get_kokkos_view(), Weight_Matrix.get_kokkos_view()));
   distributed_weights->fillComplete();
+
+  //initialize weight matrix
+  if(simparam->dann_training_on){
+    distributed_weights->setAllToScalar(simparam->optimization_options.max_weight_value);
+  }
+  else{
+    distributed_weights->setAllToScalar(1.0);
+    //distributed_weights->randomize(1.0);
+  }
+
   
 }
 

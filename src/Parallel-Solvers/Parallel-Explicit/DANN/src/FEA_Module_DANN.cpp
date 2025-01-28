@@ -172,11 +172,14 @@ void FEA_Module_DANN::write_data(std::map<std::string, const double*>& point_dat
     for (const auto& field_name : simparam->output_options.output_fields) {
         switch (field_name) {
         case FIELD::state:
+            {
             // node "state"
             node_states.update_host();
-            point_data_scalars_double["state"] = &node_states.host(rk_level, 0);
+            vec_array node_states = node_states_distributed->getLocalView<HostSpace>(Tpetra::Access::ReadWrite);
+            double* view_pointer = node_states.data();
+            point_data_scalars_double["state"] = &view_pointer[0];
+            }
             break;
-
 
         default:
             break;
@@ -287,6 +290,7 @@ void FEA_Module_DANN::dann_solve()
         //read in training and test data in batches
         read_training_data(current_batch_size, last_batch);
         
+        previous_node_states_distributed->describe(*fos, Teuchos::VERB_EXTREME);
         //batch progress print
         if(myrank==0){
             //std::cout << "= ";
@@ -297,18 +301,43 @@ void FEA_Module_DANN::dann_solve()
         all_previous_node_states_distributed->doImport(*previous_node_states_distributed, *importer, Tpetra::INSERT);
         for(int istep = 0; istep < cycle_stop; istep++){
             distributed_weights->apply(*previous_node_states_distributed,*node_states_distributed);
-            sigmoid_activation(node_states_distributed);
+            tanh_activation(node_states_distributed);
             //comm to all here
             all_node_states_distributed->doImport(*node_states_distributed, *importer, Tpetra::INSERT);
             all_previous_node_states_distributed->assign(*all_node_states_distributed);
+
+            size_t write = 0;
+            if (istep == cycle_stop) {
+                write = 1;
+            }
+            else if (istep >= graphics_time) {
+                write = 1;
+            }
+
+            // write outputs
+            if (write == 1) {
+
+                if (myrank == 0) {
+                    printf("Writing outputs to file at %f \n", graphics_time);
+                }
+
+                double comm_time1 = Explicit_Solver_Pointer_->CPU_Time();
+                Explicit_Solver_Pointer_->write_outputs();
+
+                double comm_time2 = Explicit_Solver_Pointer_->CPU_Time();
+                Explicit_Solver_Pointer_->output_time += comm_time2 - comm_time1;
+
+                graphics_time = istep + graphics_dt_ival;
+            } // end if
+            
         }
         
         //output last state vector to debug activation
         // if(ibatch==num_batches-1){
-        //     previous_node_states_distributed->describe(*fos, Teuchos::VERB_EXTREME);
         // }
 
     }
+
     
 } // end of DANN solve
 

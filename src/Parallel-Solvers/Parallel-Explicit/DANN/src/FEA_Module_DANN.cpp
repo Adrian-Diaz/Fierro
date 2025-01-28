@@ -268,7 +268,7 @@ void FEA_Module_DANN::dann_solve()
 
     int print_cycle = dynamic_options.print_cycle;
 
-    graphics_time    = simparam->output_options.graphics_step;
+    graphics_time    = 0;
     graphics_dt_ival = simparam->output_options.graphics_step;
     cycle_stop     = dynamic_options.cycle_stop;
     graphics_times = simparam->output_options.graphics_times;
@@ -289,8 +289,8 @@ void FEA_Module_DANN::dann_solve()
         previous_node_states_distributed->putScalar(0);
         //read in training and test data in batches
         read_training_data(current_batch_size, last_batch);
-        
-        previous_node_states_distributed->describe(*fos, Teuchos::VERB_EXTREME);
+        node_states_distributed->assign(*previous_node_states_distributed);
+        //distributed_weights->describe(*fos, Teuchos::VERB_EXTREME);
         //batch progress print
         if(myrank==0){
             //std::cout << "= ";
@@ -298,6 +298,7 @@ void FEA_Module_DANN::dann_solve()
         //read_testing_data(ibatch);
         //first_testing_batch_read = false;
         //comm to all here
+        Explicit_Solver_Pointer_->write_outputs();
         all_previous_node_states_distributed->doImport(*previous_node_states_distributed, *importer, Tpetra::INSERT);
         for(int istep = 0; istep < cycle_stop; istep++){
             distributed_weights->apply(*previous_node_states_distributed,*node_states_distributed);

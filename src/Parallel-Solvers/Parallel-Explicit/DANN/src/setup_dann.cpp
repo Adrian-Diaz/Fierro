@@ -233,7 +233,7 @@ void FEA_Module_DANN::init_assembly(){
       //if(current_node==-1)
       //std::cout << "Graph Matrix node access on task " << myrank << std::endl;
       //std::cout << Repeat_Graph_Matrix(inode,istride) << std::endl;
-      if(node_indices_used(current_node)){
+      if(node_indices_used(current_node)||inode==current_node){
         //set global assembly map index to the location in the graph matrix where this global node was first found
         // current_element_index = Element_local_indices(inode,istride,0);
         // element_row_index = Element_local_indices(inode,istride,1);

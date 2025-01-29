@@ -342,13 +342,31 @@ void FEA_Module_DANN::init_assembly(){
   distributed_weights = Teuchos::rcp(new MAT(map, colmap, row_offsets_pass, weight_local_indices.get_kokkos_view(), Weight_Matrix.get_kokkos_view()));
   distributed_weights->fillComplete();
 
-  //initialize weight matrix
+  //initialize weight matrix to random values
   if(simparam->dann_training_on){
-    distributed_weights->setAllToScalar(simparam->optimization_options.max_weight_value);
+    //randomize
+    // random generator
+    std::default_random_engine gen;
+    std::uniform_real_distribution<double> distribution(simparam->optimization_options.min_weight_value, simparam->optimization_options.max_weight_value);
+ 
+    for(int irow = 0; irow < nlocal_nodes; irow++){
+      for(int istride = 0; istride < Graph_Matrix_Strides(irow); istride++){
+        Weight_Matrix(irow,istride) = distribution(gen);
+      }
+    }
   }
   else{
-    distributed_weights->setAllToScalar(1.0);
-    //distributed_weights->randomize(1.0);
+    //randomize
+    // random generator
+    std::default_random_engine gen;
+    std::uniform_real_distribution<double> distribution(-1.0, 1.0);
+ 
+    for(int irow = 0; irow < nlocal_nodes; irow++){
+      for(int istride = 0; istride < Graph_Matrix_Strides(irow); istride++){
+        Weight_Matrix(irow,istride) = distribution(gen);
+      }
+    }
+    //distributed_weights->setAllToScalar(1.0);
   }
 
   

@@ -308,7 +308,7 @@ void FEA_Module_DANN::dann_solve()
             all_previous_node_states_distributed->assign(*all_node_states_distributed);
 
             size_t write = 0;
-            if (istep == cycle_stop) {
+            if (istep == cycle_stop-1) {
                 write = 1;
             }
             else if (istep >= graphics_time) {

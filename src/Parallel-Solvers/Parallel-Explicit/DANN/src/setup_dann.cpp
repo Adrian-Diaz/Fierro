@@ -396,7 +396,7 @@ void FEA_Module_DANN::read_training_data(size_t current_batch_size, bool last_ba
   size_t batch_id, patch_id;
   int buffer_loop, buffer_iteration, buffer_iterations, scan_loop;
   size_t num_local_bc_nodes;
-  long long int num_bc_input_nodes;
+  long long int num_bc_input_nodes, offset_input_nodes;
   size_t read_index_start, node_rid, elem_gid;
   size_t strain_count;
   CArray<GO> Surface_Nodes;
@@ -483,7 +483,21 @@ void FEA_Module_DANN::read_training_data(size_t current_batch_size, bool last_ba
     }
 
     MPI_Scatter(inputs_per_rank,1,MPI_LONG_LONG_INT,&num_bc_input_nodes,1,MPI_LONG_LONG_INT,0,MPI_COMM_WORLD);
-    std::cout << "BC INPUT NODES " << num_bc_input_nodes << std::endl;
+    //std::cout << "BC INPUT NODES " << num_bc_input_nodes << std::endl;
+
+    //reuse array to get offsets for each rank with bc patches to read in inputs
+    if(myrank==0){
+      long long int global_input_offset = 0;
+      for(int irank=0; irank < nranks; irank++){
+        if(inputs_per_rank[irank]){
+          bc_nodes_per_rank[irank] = global_input_offset;
+          global_input_offset += inputs_per_rank[irank];
+        }
+      }
+    }
+
+    MPI_Scatter(bc_nodes_per_rank,1,MPI_LONG_LONG_INT,&offset_input_nodes,1,MPI_LONG_LONG_INT,0,MPI_COMM_WORLD);
+    //std::cout << "BC OFFSET NODES " << offset_input_nodes << std::endl;
 
     if(myrank==0){
       delete[] inputs_per_rank;
@@ -598,7 +612,7 @@ void FEA_Module_DANN::read_training_data(size_t current_batch_size, bool last_ba
                   it++;
                   // set local node index in this mpi rank
                   node_rid = map->getLocalElement(node_gid);
-                  dof_value = atof(&read_buffer(scan_loop, inode, 0));
+                  dof_value = atof(&read_buffer(scan_loop, offset_input_nodes + inode, 0));
                   node_states(node_rid, batch_id) = dof_value;
                   
                   //std::cout << "BC INPUT NODES " << node_gid << " VALUE " << node_states(node_rid, batch_id) << std::endl;

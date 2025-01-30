@@ -91,6 +91,8 @@ public:
 
     void dann_solve();
 
+    void init_boundaries();
+
     void sigmoid_activation(Teuchos::RCP<MV> previous_node_states_distributed);
 
     void tanh_activation(Teuchos::RCP<MV> previous_node_states_distributed);
@@ -104,6 +106,17 @@ public:
                       const DViewCArrayKokkos<double>& node_states,
                       const double rk_alpha,
                       const size_t cycle);
+
+
+    void tag_boundaries(int this_bc_tag, real_t val, int bdy_set, real_t* patch_limits = NULL);
+
+    int check_boundary(Node_Combination& Patch_Nodes, int this_bc_tag, real_t val, real_t* patch_limits);
+
+    void generate_bcs();
+
+    void grow_boundary_sets(int num_boundary_sets);
+
+    void init_boundary_sets(int num_boundary_sets);
 
     //virtual void update_forward_solve(Teuchos::RCP<const MV> zp, bool print_design=false);
 

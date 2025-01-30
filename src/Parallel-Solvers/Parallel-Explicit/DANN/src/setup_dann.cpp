@@ -42,6 +42,7 @@
 #include "Tpetra_Import_Util2.hpp"
 
 #define MAX_WORD 30
+#define BC_EPSILON 1.0e-6
 // #define DEBUG
 
 /////////////////////////////////////////////////////////////////////////////
@@ -60,7 +61,9 @@ void FEA_Module_DANN::setup()
     bool topology_optimization_on = simparam->topology_optimization_on;
     bool shape_optimization_on    = simparam->shape_optimization_on;
 
+    init_boundaries();
     init_assembly();
+    generate_bcs();
     
 } // end of setup
 
@@ -390,16 +393,103 @@ void FEA_Module_DANN::read_training_data(size_t current_batch_size, bool last_ba
   size_t buffer_size = module_params->read_buffer_size;
   size_t batch_size = current_batch_size;
   int local_node_index;
-  size_t batch_id;
+  size_t batch_id, patch_id;
   int buffer_loop, buffer_iteration, buffer_iterations, scan_loop;
-
+  size_t num_local_bc_nodes;
+  long long int num_bc_input_nodes;
   size_t read_index_start, node_rid, elem_gid;
   size_t strain_count;
+  CArray<GO> Surface_Nodes;
+  std::set<long long int> bc_node_set;
 
   GO     node_gid;
   real_t dof_value;
 
   CArrayKokkos<char, array_layout, HostSpace, memory_traits> read_buffer;
+
+  if(num_boundary_conditions){
+    //get unique node set for this condition since storage is in patches
+    for(int ipatch=0; ipatch < NBoundary_Condition_Patches(0); ipatch++){
+      patch_id = Boundary_Condition_Patches(0, ipatch);
+      Surface_Nodes = Boundary_Patches(patch_id).node_set;
+      for(int inode=0; inode < Surface_Nodes.size(); inode++){
+        if(map->isNodeGlobalElement(Surface_Nodes(inode))){
+          bc_node_set.insert(Surface_Nodes(inode));
+        }
+      }
+    }
+
+    num_local_bc_nodes = bc_node_set.size();
+
+    //TODO: use subcommunicator
+
+    //find how many ranks have bc nodes
+    int local_have_bc_nodes = (NBoundary_Condition_Patches(0)) ? 1 : 0;
+    int global_have_bc_nodes = 0;
+    
+    MPI_Allreduce(&local_have_bc_nodes, &global_have_bc_nodes, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    //find total unique bc nodes
+    long long int num_global_bc_nodes;
+    MPI_Allreduce(&num_local_bc_nodes, &num_global_bc_nodes, 1, MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    if(num_global_bc_nodes < num_input_nodes){
+      if(myrank==0){
+        std::cout << "Not enough BC nodes to apply training data" << std::endl;
+      }
+      Solver_Pointer_->exit_solver(0);
+    }
+
+    //compute avg bc nodes being assigned an input per rank
+    long long int avg_num_input_nodes = num_input_nodes/global_have_bc_nodes;
+    long long int rem_num_input_nodes = num_input_nodes%global_have_bc_nodes;
+    long long int *inputs_per_rank, *bc_nodes_per_rank;
+    //gather bc nodes per rank
+
+    if(myrank==0){
+      inputs_per_rank = new long long int[nranks];
+      bc_nodes_per_rank = new long long int[nranks];
+    }
+    
+    MPI_Gather(&num_local_bc_nodes,1,MPI_LONG_LONG_INT,inputs_per_rank,1,MPI_LONG_LONG_INT,0,MPI_COMM_WORLD);
+
+    //assign upper bound assignment to each rank in a scatter
+    if(myrank==0){
+      //copy
+      for(int irank=0; irank < nranks; irank++){
+        bc_nodes_per_rank[irank] = inputs_per_rank[irank];
+      }
+      long long int remainder = num_input_nodes;
+      for(int irank=0; irank < nranks; irank++){
+        if(inputs_per_rank[irank] < avg_num_input_nodes){
+          remainder -= inputs_per_rank[irank];
+        }
+        else if(inputs_per_rank[irank] >= avg_num_input_nodes){
+          inputs_per_rank[irank] = avg_num_input_nodes;
+          remainder -= inputs_per_rank[irank];
+        }
+      }
+      long long int remainder_contrib;
+      //assign remainder wherever it fits
+      for(int irank=0; irank < nranks; irank++){
+        if(bc_nodes_per_rank[irank] > avg_num_input_nodes){
+          remainder_contrib = bc_nodes_per_rank[irank] - inputs_per_rank[irank];
+          if(remainder_contrib > remainder) remainder_contrib = remainder;
+          inputs_per_rank[irank] += remainder_contrib;
+          remainder -= remainder_contrib;
+        }
+        if(remainder==0) break;
+      }
+    }
+
+    MPI_Scatter(inputs_per_rank,1,MPI_LONG_LONG_INT,&num_bc_input_nodes,1,MPI_LONG_LONG_INT,0,MPI_COMM_WORLD);
+    std::cout << "BC INPUT NODES " << num_bc_input_nodes << std::endl;
+
+    if(myrank==0){
+      delete[] inputs_per_rank;
+      delete[] bc_nodes_per_rank;
+    }
+  }
 
   // open the input and output training data files
   if (myrank == 0&&first_training_batch_read)
@@ -489,20 +579,44 @@ void FEA_Module_DANN::read_training_data(size_t current_batch_size, bool last_ba
 
           // determine which data to store in the swage mesh members (the local node data)
           // loop through read buffer
+          
           for (scan_loop = 0; scan_loop < buffer_loop; scan_loop++)
           {
               // set global node id (ensight specific order)
               batch_id = read_index_start + scan_loop;
               // let map decide if this node id belongs locally; if yes store data
-              for (int inode = 0; inode < num_input_nodes; inode++)
-              {
-                node_gid = inode; //we assume input nodes will be the first 0:num_input_nodes-1 global nodes
-                if (map->isNodeGlobalElement(node_gid))
+              if(num_boundary_conditions){
+                auto it     = bc_node_set.begin();
+                // while (it != bc_node_set.end()) {
+                //     node_gid = *it;
+                //     it++;
+                // }
+                
+                for (int inode = 0; inode < num_bc_input_nodes; inode++)
                 {
-                    // set local node index in this mpi rank
-                    node_rid = map->getLocalElement(node_gid);
-                    dof_value = atof(&read_buffer(scan_loop, node_gid, 0));
-                    node_states(node_rid, batch_id) = dof_value;
+                  node_gid = *it; //assign to the first num_input nodes of the first BC set
+                  it++;
+                  // set local node index in this mpi rank
+                  node_rid = map->getLocalElement(node_gid);
+                  dof_value = atof(&read_buffer(scan_loop, inode, 0));
+                  node_states(node_rid, batch_id) = dof_value;
+                  
+                  //std::cout << "BC INPUT NODES " << node_gid << " VALUE " << node_states(node_rid, batch_id) << std::endl;
+                }
+              }
+              else{
+                for (int inode = 0; inode < num_input_nodes; inode++)
+                {
+                  node_gid = inode; //we assume input nodes will be the first 0:num_input_nodes-1 global nodes
+                  if (map->isNodeGlobalElement(node_gid))
+                  {
+                      // set local node index in this mpi rank
+                      node_rid = map->getLocalElement(node_gid);
+                      dof_value = atof(&read_buffer(scan_loop, node_gid, 0));
+                      node_states(node_rid, batch_id) = dof_value;
+                  
+                      //std::cout << "BC INPUT NODES " << node_gid << " VALUE " << node_states(node_rid, batch_id) << std::endl;
+                  }
                 }
               }
           }
@@ -619,3 +733,337 @@ void FEA_Module_DANN::read_testing_data(size_t current_batch_size, bool last_bat
     
 } // end of read_testing_data
 
+/////////////////////////////////////////////////////////////////////////////
+///
+/// \fn init_boundaries
+///
+/// \brief Initialize sets of element boundary surfaces and arrays for input conditions
+///
+/////////////////////////////////////////////////////////////////////////////
+void FEA_Module_DANN::init_boundaries()
+{
+    max_boundary_sets = module_params->boundary_conditions.size();
+    int num_dim = simparam->num_dims;
+
+    // set the number of boundary sets
+    if (myrank == 0) {
+        std::cout << "building boundary sets " << std::endl;
+    }
+
+    // initialize to 1 since there must be at least 1 boundary set anyway; read in may occure later
+    if (max_boundary_sets == 0) {
+        max_boundary_sets = 1;
+    }
+    // std::cout << "NUM BOUNDARY CONDITIONS ON RANK " << myrank << " FOR INIT " << num_boundary_conditions <<std::endl;
+    init_boundary_sets(max_boundary_sets);
+
+    // allocate nodal data
+    Node_DOF_Boundary_Condition_Type = CArrayKokkos<int, array_layout, device_type, memory_traits>(nall_nodes * num_dim, "Node_DOF_Boundary_Condition_Type");
+
+    // initialize
+    for (int init = 0; init < nall_nodes * num_dim; init++) {
+        Node_DOF_Boundary_Condition_Type(init) = NONE;
+    }
+
+    Number_DOF_BCS = 0;
+}
+
+/* ----------------------------------------------------------------------
+   Assign sets of element boundary surfaces corresponding to user BCs
+------------------------------------------------------------------------- */
+
+void FEA_Module_DANN::generate_bcs(){
+  int num_dim = simparam->num_dims;
+  int num_bcs;
+  int bc_tag;
+  real_t value;
+  real_t surface_limits[4];
+
+  for (auto bc : module_params->boundary_conditions) {
+    switch (bc.surface.type) {
+      case BOUNDARY_TYPE::x_plane:
+        bc_tag = 0;
+        break;
+      case BOUNDARY_TYPE::y_plane:
+        bc_tag = 1;
+        break;
+      case BOUNDARY_TYPE::z_plane:
+        bc_tag = 2;
+        break;
+      default:
+        throw std::runtime_error("Invalid surface type: " + to_string(bc.surface.type));
+    }
+    value = bc.surface.plane_position * simparam->get_unit_scaling();
+
+    //determine if the surface has finite limits
+    if(num_boundary_conditions + 1>max_boundary_sets) grow_boundary_sets(num_boundary_conditions+1);
+    //tag_boundaries(bc_tag, value, num_boundary_conditions, surface_limits);
+    if(bc.surface.use_limits){
+      surface_limits[0] = bc.surface.surface_limits_sl;
+      surface_limits[1] = bc.surface.surface_limits_su;
+      surface_limits[2] = bc.surface.surface_limits_tl;
+      surface_limits[3] = bc.surface.surface_limits_tu;
+      tag_boundaries(bc_tag, value, num_boundary_conditions, surface_limits);
+    }
+    else{
+      tag_boundaries(bc_tag, value, num_boundary_conditions);
+    }
+    *fos << "tagging " << bc_tag << " at " << value <<  std::endl;
+    
+    *fos << "tagged a set " << std::endl;
+    std::cout << "number of bdy patches in this bc set = " << NBoundary_Condition_Patches(num_boundary_conditions) << std::endl;
+    *fos << std::endl;
+    num_boundary_conditions++;
+  }
+} // end generate_bcs
+
+/* ----------------------------------------------------------------------
+   find which boundary patches correspond to the given BC.
+   bc_tag = 0 xplane, 1 yplane, 2 zplane, 3 cylinder, 4 is shell
+   val = plane value, cylinder radius, shell radius
+------------------------------------------------------------------------- */
+
+void FEA_Module_DANN::tag_boundaries(int bc_tag, real_t val, int bdy_set, real_t* patch_limits)
+{
+    int is_on_set;
+    /*
+    if (bdy_set == num_bdy_sets_){
+      std::cout << " ERROR: number of boundary sets must be increased by "
+        << bdy_set-num_bdy_sets_+1 << std::endl;
+      exit(0);
+    }
+    */
+
+    // test patch limits for feasibility
+    if (patch_limits != NULL)
+    {
+        // test for upper bounds being greater than lower bounds
+        if (patch_limits[1] <= patch_limits[0])
+        {
+            std::cout << " Warning: patch limits for boundary condition are infeasible " << patch_limits[0] << " and " << patch_limits[1] << std::endl;
+        }
+        if (patch_limits[3] <= patch_limits[2])
+        {
+            std::cout << " Warning: patch limits for boundary condition are infeasible " << patch_limits[2] << " and " << patch_limits[3] << std::endl;
+        }
+    }
+
+    // save the boundary vertices to this set that are on the plane
+    int counter = 0;
+    for (int iboundary_patch = 0; iboundary_patch < nboundary_patches; iboundary_patch++)
+    {
+        // check to see if this patch is on the specified plane
+        is_on_set = check_boundary(Boundary_Patches(iboundary_patch), bc_tag, val, patch_limits); // no=0, yes=1
+
+        if (is_on_set == 1)
+        {
+            Boundary_Condition_Patches(bdy_set, counter) = iboundary_patch;
+            counter++;
+        }
+    } // end for bdy_patch
+
+    // save the number of bdy patches in the set
+    NBoundary_Condition_Patches(bdy_set) = counter;
+
+    *fos << " tagged boundary patches " << std::endl;
+}
+
+/* ----------------------------------------------------------------------
+   routine for checking to see if a patch is on a boundary set
+   bc_tag = 0 xplane, 1 yplane, 3 zplane, 4 cylinder, 5 is shell
+   val = plane value, radius, radius
+------------------------------------------------------------------------- */
+
+int FEA_Module_DANN::check_boundary(Node_Combination& Patch_Nodes, int bc_tag, real_t val, real_t* patch_limits)
+{
+    int is_on_set = 1;
+    const_host_vec_array all_node_coords = all_node_coords_distributed->getLocalView<HostSpace>(Tpetra::Access::ReadOnly);
+
+    // Nodes on the Patch
+    auto   node_list = Patch_Nodes.node_set;
+    int    num_dim   = simparam->num_dims;
+    size_t nnodes    = node_list.size();
+    size_t node_rid;
+    real_t node_coord[num_dim];
+    int    dim_other1, dim_other2;
+    CArrayKokkos<size_t, array_layout, device_type, memory_traits> node_on_flags(nnodes, "node_on_flags");
+
+    // initialize
+    for (int inode = 0; inode < nnodes; inode++)
+    {
+        node_on_flags(inode) = 0;
+    }
+
+    if (bc_tag == 0)
+    {
+        dim_other1 = 1;
+        dim_other2 = 2;
+    }
+    else if (bc_tag == 1)
+    {
+        dim_other1 = 0;
+        dim_other2 = 2;
+    }
+    else if (bc_tag == 2)
+    {
+        dim_other1 = 0;
+        dim_other2 = 1;
+    }
+
+    // test for planes
+    if (bc_tag < 3)
+    {
+        for (int inode = 0; inode < nnodes; inode++)
+        {
+            node_rid = all_node_map->getLocalElement(node_list(inode));
+            for (int init = 0; init < num_dim; init++)
+            {
+                node_coord[init] = all_node_coords(node_rid, init);
+            }
+            if (fabs(node_coord[bc_tag] - val) <= BC_EPSILON)
+            {
+                node_on_flags(inode) = 1;
+
+                // test if within patch segment if user specified
+                if (patch_limits != NULL)
+                {
+                    if (node_coord[dim_other1] - patch_limits[0] <= -BC_EPSILON)
+                    {
+                        node_on_flags(inode) = 0;
+                    }
+                    if (node_coord[dim_other1] - patch_limits[1] >= BC_EPSILON)
+                    {
+                        node_on_flags(inode) = 0;
+                    }
+                    if (node_coord[dim_other2] - patch_limits[2] <= -BC_EPSILON)
+                    {
+                        node_on_flags(inode) = 0;
+                    }
+                    if (node_coord[dim_other2] - patch_limits[3] >= BC_EPSILON)
+                    {
+                        node_on_flags(inode) = 0;
+                    }
+                }
+            }
+            // debug print of node id and node coord
+            // std::cout << "node coords on task " << myrank << " for node " << node_rid << std::endl;
+            // std::cout << "coord " <<node_coord << " flag " << node_on_flags(inode) << " bc_tag " << bc_tag << std::endl;
+        }
+    }
+
+    /*
+    // cylinderical shell where radius = sqrt(x^2 + y^2)
+    else if (this_bc_tag == 3){
+
+        real_t R = sqrt(these_patch_coords[0]*these_patch_coords[0] +
+                        these_patch_coords[1]*these_patch_coords[1]);
+
+        if ( fabs(R - val) <= 1.0e-8 ) is_on_bdy = 1;
+
+
+    }// end if on type
+
+    // spherical shell where radius = sqrt(x^2 + y^2 + z^2)
+    else if (this_bc_tag == 4){
+
+        real_t R = sqrt(these_patch_coords[0]*these_patch_coords[0] +
+                        these_patch_coords[1]*these_patch_coords[1] +
+                        these_patch_coords[2]*these_patch_coords[2]);
+
+        if ( fabs(R - val) <= 1.0e-8 ) is_on_bdy = 1;
+
+    } // end if on type
+    */
+    // check if all nodes lie on the boundary set
+    for (int inode = 0; inode < nnodes; inode++)
+    {
+        if (!node_on_flags(inode))
+        {
+            is_on_set = 0;
+        }
+    }
+
+    // debug print of return flag
+    // std::cout << "patch flag on task " << myrank << " is " << is_on_set << std::endl;
+    return is_on_set;
+} // end method to check bdy
+
+/////////////////////////////////////////////////////////////////////////////
+///
+/// \fn grow_boundary_sets
+///
+/// \brief Grow boundary conditions sets of element boundary surfaces
+///
+/// \param Number of boundary sets
+///
+/////////////////////////////////////////////////////////////////////////////
+void FEA_Module_DANN::grow_boundary_sets(int num_sets)
+{
+    int num_dim = simparam->num_dims;
+
+    if (num_sets == 0) {
+        std::cout << " Warning: number of boundary conditions being set to 0";
+        return;
+    }
+
+    // std::cout << " DEBUG PRINT "<<num_sets << " " << nboundary_patches << std::endl;
+    if (num_sets > max_boundary_sets) {
+        // temporary storage for previous data
+        CArrayKokkos<int, array_layout, HostSpace, memory_traits> Temp_Boundary_Condition_Type_List     = Boundary_Condition_Type_List;
+        CArrayKokkos<size_t, array_layout, device_type, memory_traits> Temp_NBoundary_Condition_Patches = NBoundary_Condition_Patches;
+        CArrayKokkos<size_t, array_layout, device_type, memory_traits> Temp_Boundary_Condition_Patches  = Boundary_Condition_Patches;
+
+        max_boundary_sets = num_sets + 5; // 5 is an arbitrary buffer
+        Boundary_Condition_Type_List = CArrayKokkos<int, array_layout, HostSpace, memory_traits>(max_boundary_sets, "Boundary_Condition_Type_List");
+        NBoundary_Condition_Patches  = CArrayKokkos<size_t, array_layout, device_type, memory_traits>(max_boundary_sets, "NBoundary_Condition_Patches");
+        // std::cout << "NBOUNDARY PATCHES ON RANK " << myrank << " FOR GROW " << nboundary_patches <<std::endl;
+        Boundary_Condition_Patches = CArrayKokkos<size_t, array_layout, device_type, memory_traits>(max_boundary_sets, nboundary_patches, "Boundary_Condition_Patches");
+
+        // copy previous data back over
+#ifdef DEBUG
+        std::cout << "NUM BOUNDARY CONDITIONS ON RANK " << myrank << " FOR COPY " << max_boundary_sets << std::endl;
+#endif
+        for (int iset = 0; iset < num_boundary_conditions; iset++) {
+            Boundary_Condition_Type_List(iset) = Temp_Boundary_Condition_Type_List(iset);
+            NBoundary_Condition_Patches(iset)  = Temp_NBoundary_Condition_Patches(iset);
+            for (int ipatch = 0; ipatch < nboundary_patches; ipatch++) {
+                Boundary_Condition_Patches(iset, ipatch) = Temp_Boundary_Condition_Patches(iset, ipatch);
+            }
+        }
+
+        // initialize data
+        for (int iset = num_boundary_conditions; iset < max_boundary_sets; iset++) {
+            NBoundary_Condition_Patches(iset) = 0;
+        }
+
+        // initialize
+        for (int ibdy = num_boundary_conditions; ibdy < max_boundary_sets; ibdy++) {
+            Boundary_Condition_Type_List(ibdy) = NONE;
+        }
+    }
+}
+
+/* ----------------------------------------------------------------------
+   initialize storage for element boundary surfaces corresponding to user BCs
+------------------------------------------------------------------------- */
+
+void FEA_Module_DANN::init_boundary_sets (int num_sets){
+
+  if(num_sets == 0){
+    std::cout << " Warning: number of boundary conditions = 0";
+    return;
+  }
+  //initialize maximum
+  max_boundary_sets = num_sets;
+  //std::cout << " DEBUG PRINT "<<num_sets << " " << nboundary_patches << std::endl;
+  Boundary_Condition_Type_List = CArrayKokkos<int, array_layout, HostSpace, memory_traits>(num_sets, "Boundary_Condition_Type_List");
+  NBoundary_Condition_Patches = CArrayKokkos<size_t, array_layout, device_type, memory_traits>(num_sets, "NBoundary_Condition_Patches");
+  //std::cout << "NBOUNDARY PATCHES ON RANK " << myrank << " FOR INIT IS " << nboundary_patches <<std::endl;
+  Boundary_Condition_Patches = CArrayKokkos<size_t, array_layout, device_type, memory_traits>(num_sets, nboundary_patches, "Boundary_Condition_Patches");
+
+  //initialize data
+  for(int iset = 0; iset < num_sets; iset++) NBoundary_Condition_Patches(iset) = 0;
+
+   //initialize
+  for(int ibdy=0; ibdy < num_sets; ibdy++) Boundary_Condition_Type_List(ibdy) = NONE;
+}

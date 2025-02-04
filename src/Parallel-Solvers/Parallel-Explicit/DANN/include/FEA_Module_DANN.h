@@ -97,6 +97,8 @@ public:
 
     void tanh_activation(Teuchos::RCP<MV> previous_node_states_distributed);
 
+    void relu_activation(Teuchos::RCP<MV> previous_node_states_distributed, real_t max);
+
     void update_state_dann(double rk_alpha,
                              const size_t num_nodes,
                              DViewCArrayKokkos<double>& node_states);

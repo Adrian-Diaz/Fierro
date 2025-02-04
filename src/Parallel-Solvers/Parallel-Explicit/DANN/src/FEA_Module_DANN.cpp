@@ -256,6 +256,7 @@ void FEA_Module_DANN::dann_solve()
     size_t num_testing_data = module_params->num_testing_data;
     size_t num_input_nodes = module_params->num_input_nodes;
     size_t num_output_nodes = module_params->num_output_nodes;
+    real_t relu_max = module_params->relu_max;
     size_t num_batches = num_training_data/batch_size;
     size_t trailing_batch_size = 0;
     bool last_batch = false;
@@ -302,7 +303,8 @@ void FEA_Module_DANN::dann_solve()
         all_previous_node_states_distributed->doImport(*previous_node_states_distributed, *importer, Tpetra::INSERT);
         for(int istep = 0; istep < cycle_stop; istep++){
             distributed_weights->apply(*previous_node_states_distributed,*node_states_distributed);
-            tanh_activation(node_states_distributed);
+            //tanh_activation(node_states_distributed);
+            relu_activation(node_states_distributed, relu_max);
             //comm to all here
             all_node_states_distributed->doImport(*node_states_distributed, *importer, Tpetra::INSERT);
             all_previous_node_states_distributed->assign(*all_node_states_distributed);
@@ -358,6 +360,19 @@ void FEA_Module_DANN::tanh_activation(Teuchos::RCP<MV> previous_node_states_dist
     FOR_ALL_CLASS(node_gid, 0, nlocal_nodes, {
         for(int ibatch=0; ibatch < batch_size; ibatch++){
             node_states(node_gid,ibatch) = (exp(2*node_states(node_gid,ibatch))-1)/(exp(2*node_states(node_gid,ibatch))+1);
+        }
+    }); // end parallel for
+}
+
+//activates every element of the current pre-state vector using the ReLU function
+void FEA_Module_DANN::relu_activation(Teuchos::RCP<MV> previous_node_states_distributed, real_t max){
+    vec_array node_states = node_states_distributed->getLocalView<device_type>(Tpetra::Access::ReadWrite);
+    FOR_ALL_CLASS(node_gid, 0, nlocal_nodes, {
+        for(int ibatch=0; ibatch < batch_size; ibatch++){
+            if(node_states(node_gid,ibatch) < 0)
+                node_states(node_gid,ibatch) = 0;
+            else if(node_states(node_gid,ibatch) > max)
+                node_states(node_gid,ibatch) = max;
         }
     }); // end parallel for
 }
